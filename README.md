@@ -2,7 +2,7 @@
 
 # Wocyber_S2
 
-**飞牛适配 S2 镜像补丁 · 智小惠 S2 刷入 fnOS 操作指南**
+**飞牛适配 S2 镜像 · 智小惠 S2 刷入 fnOS 操作指南**
 
 [![平台](https://img.shields.io/badge/Platform-RK3568-orange?style=flat-square)](https://github.com/)
 [![系统](https://img.shields.io/badge/OS-fnOS-blue?style=flat-square)](https://help.fnnas.com/)
