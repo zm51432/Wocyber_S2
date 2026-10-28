@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "wocyber_S2.main": {
+            "title": "wocyber_S2",
+            "icon": "images/icon-{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "${wizard_port}",
+            "url": "/",
+            "allUsers": false
+        }
+    }
+}

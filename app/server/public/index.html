@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wocyber_S2 · S2 硬件控制台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="bgfx" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="top">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path class="mk-a" d="M16 2 29 9v14L16 30 3 23V9z"/>
+      <path class="mk-b" d="M16 8 24 12v8l-8 4-8-4v-8z"/>
+      <circle class="mk-c" cx="16" cy="16" r="3"/>
+    </svg>
+    <div class="brand-txt">
+      <h1>wocyber_S2</h1>
+      <span class="sub">S2 硬件控制台 · RK3568</span>
+    </div>
+  </div>
+  <div class="hud">
+    <span class="pill" id="b-uid">—</span>
+    <span class="pill" id="b-host">—</span>
+    <span class="pill" id="b-port">端口 —</span>
+    <span class="pill clock" id="b-clock">--:--:--</span>
+    <button class="ghost icon" id="btn-refresh" title="刷新">
+      <svg viewBox="0 0 24 24" class="rot"><path d="M21 12a9 9 0 1 1-3.2-6.9M21 3v6h-6"/></svg>
+      <span>刷新</span>
+    </button>
+  </div>
+</header>
+
+<main class="grid">
+  <!-- ================= 运行总览 ================= -->
+  <section class="card col-12" id="card-status">
+    <div class="card-hd"><i class="code">OVW</i><h2>运行总览</h2><span class="hd-line"></span><span class="hd-tag" id="s-tag">SYSTEM NOMINAL</span></div>
+    <div class="ov-body">
+      <div class="gauges">
+        <div class="gauge" id="g-cpu">
+          <div class="g-ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="g-tick" cx="60" cy="60" r="56"/>
+              <circle class="g-track" cx="60" cy="60" r="48"/>
+              <circle class="g-prog"  cx="60" cy="60" r="48"/>
+            </svg>
+            <div class="g-mid"><b id="s-cpu">—</b><em>℃</em></div>
+          </div>
+          <span class="g-name">CPU TEMP</span>
+        </div>
+        <div class="gauge" id="g-hdd">
+          <div class="g-ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="g-tick" cx="60" cy="60" r="56"/>
+              <circle class="g-track" cx="60" cy="60" r="48"/>
+              <circle class="g-prog"  cx="60" cy="60" r="48"/>
+            </svg>
+            <div class="g-mid"><b id="s-hdd">—</b><em>°</em></div>
+          </div>
+          <span class="g-name">硬盘温度</span>
+        </div>
+        <div class="gauge" id="g-fan">
+          <div class="g-ring">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="g-tick" cx="60" cy="60" r="56"/>
+              <circle class="g-track" cx="60" cy="60" r="48"/>
+              <circle class="g-prog"  cx="60" cy="60" r="48"/>
+            </svg>
+            <div class="g-mid"><b id="s-fan">—</b><em>挡</em></div>
+          </div>
+          <span class="g-name">FAN LEVEL</span>
+        </div>
+      </div>
+
+      <div class="ov-side">
+        <div class="pane">
+          <div class="pane-hd">THERMAL TREND<span id="s-updated">--:--:--</span></div>
+          <svg class="trend" id="trend" viewBox="0 0 320 104" preserveAspectRatio="none" aria-hidden="true">
+            <g class="tg">
+              <line x1="0" y1="26" x2="320" y2="26"/><line x1="0" y1="52" x2="320" y2="52"/>
+              <line x1="0" y1="78" x2="320" y2="78"/><line x1="0" y1="103" x2="320" y2="103"/>
+            </g>
+            <polyline class="tl hdd" id="tl-hdd" points=""/>
+            <polyline class="tl cpu" id="tl-cpu" points=""/>
+            <circle class="tp hdd" id="tp-hdd" cx="-9" cy="-9" r="2.6"/>
+            <circle class="tp cpu" id="tp-cpu" cx="-9" cy="-9" r="2.6"/>
+          </svg>
+          <div class="legend"><span class="lg cpu">CPU</span><span class="lg hdd">HDD</span><span class="lg scale">20–100℃</span></div>
+        </div>
+        <div class="pane">
+          <div class="pane-hd">SERVICE MATRIX</div>
+          <div class="svc" id="s-services"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 灯光阵列 ================= -->
+  <section class="card col-4">
+    <div class="card-hd"><i class="code">PWR</i><h2>电源灯</h2><span class="hd-line"></span><span class="bulb" id="p-bulb"></span></div>
+    <div class="state" id="p-net-state">初始化…</div>
+    <label>灯光覆盖
+      <select id="p-ovr">
+        <option value="auto">自动（网络状态指示）</option>
+        <option value="off">强制全灭（最高优先级）</option>
+      </select>
+    </label>
+    <div class="btns"><button id="p-ovr-apply">应用</button></div>
+    <p class="hint">自动模式：网线插上（链路通）→ <b>绿灯常亮</b>；没插网线 → <b>红灯闪烁</b>。强制全灭优先级最高，固件升级 / 自愈重装都不会推翻。</p>
+  </section>
+
+  <section class="card col-4">
+    <div class="card-hd"><i class="code">DSK</i><h2>硬盘灯</h2><span class="hd-line"></span><span class="bulb" id="d-bulb"></span></div>
+    <div class="state" id="d-led-state">自动：无盘全灭 / 有盘绿灯常亮</div>
+    <label>灯光覆盖
+      <select id="d-ovr">
+        <option value="auto">自动（默认规则）</option>
+        <option value="off">强制全灭（最高优先级）</option>
+      </select>
+    </label>
+    <div class="btns"><button id="d-ovr-apply">应用</button></div>
+    <p class="hint">自动模式由 <b>sata-led-manager</b> 接管，无需调节；强制全灭后无论有盘无盘均熄灭。</p>
+  </section>
+
+  <section class="card col-4">
+    <div class="card-hd"><i class="code">BUZ</i><h2>蜂鸣器</h2><span class="hd-line"></span><span class="wave" id="b-wave"><i></i><i></i><i></i><i></i><i></i></span></div>
+    <label class="row">鸣叫时长 <input type="range" id="b-ms" min="30" max="3000" step="10" value="280"><b id="b-ms-v">280</b><em>ms</em></label>
+    <div class="btns">
+      <button id="b-test">试听</button>
+      <button class="ghost" id="b-save">保存为默认</button>
+    </div>
+    <p class="hint">时长保存在 <b>/etc/s2hwctl/beep.conf</b>，开机提示音与长按关机蜂鸣均使用该时长。</p>
+  </section>
+
+  <!-- ================= 风扇 / 定时 ================= -->
+  <section class="card col-8">
+    <div class="card-hd">
+      <i class="code">FAN</i><h2>风扇控制</h2><span class="hd-line"></span>
+      <div class="fanviz"><svg class="blade" id="fan-blade" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="fb-hub" cx="50" cy="50" r="13"/>
+        <path class="fb-b" d="M50 37c6-14 16-19 22-16s4 15-4 21c-7 5-16 3-18-5z"/>
+        <path class="fb-b" d="M63 50c14 6 19 16 16 22s-15 4-21-4c-5-7-3-16 5-18z"/>
+        <path class="fb-b" d="M50 63c-6 14-16 19-22 16s-4-15 4-21c7-5 16-3 18 5z"/>
+        <path class="fb-b" d="M37 50c-14-6-19-16-16-22s15-4 21 4c5 7 3 16-5 18z"/>
+        <circle class="fb-ring" cx="50" cy="50" r="43"/>
+      </svg><b id="f-cur">—</b></div>
+    </div>
+    <div class="row2">
+      <label>模式
+        <select id="f-mode">
+          <option value="auto">自动温控</option>
+          <option value="manual">手动挡位</option>
+        </select>
+      </label>
+      <label class="row">挡位 <input type="range" id="f-level" min="0" max="15" value="6"><b id="f-level-v">6</b><em>/15</em></label>
+    </div>
+    <details>
+      <summary>THERMAL CURVE · 温控曲线</summary>
+      <div class="grid4">
+        <label>硬盘停转&lt;<input type="number" id="f-h0"></label>
+        <label>硬盘低速<input type="number" id="f-h1"></label>
+        <label>硬盘中速<input type="number" id="f-h2"></label>
+        <label>硬盘全速<input type="number" id="f-h3"></label>
+        <label>CPU 停转&lt;<input type="number" id="f-c0"></label>
+        <label>CPU 低速<input type="number" id="f-c1"></label>
+        <label>CPU 中速<input type="number" id="f-c2"></label>
+        <label>CPU 临界<input type="number" id="f-c3"></label>
+      </div>
+    </details>
+    <div class="btns">
+      <button id="f-apply">应用并保存</button>
+      <button class="ghost" id="f-temp">仅本次生效</button>
+    </div>
+    <p class="hint">风扇取「CPU 曲线」与「硬盘曲线」中<b>较高的挡位</b>；保存写入 /etc/fan-control.conf，重启后依旧生效。</p>
+  </section>
+
+  <section class="card col-4">
+    <div class="card-hd"><i class="code">PWR</i><h2>定时开关机</h2><span class="hd-line"></span></div>
+    <label class="row switch"><input type="checkbox" id="sch-enable"><span>启用定时开关机</span></label>
+    <div class="row2">
+      <label class="row">每日关机 <input type="time" id="sch-shutdown"></label>
+      <label class="row">每日开机 <input type="time" id="sch-boot"></label>
+    </div>
+    <div class="btns"><button id="sch-apply">应用并保存</button></div>
+    <p class="hint" id="sch-hint">关机为每日到点自动 poweroff；开机依赖主板 RTC 定时唤醒（需 NAS 常通电）。</p>
+  </section>
+
+  <!-- ================= 端口 / 脚本 ================= -->
+  <section class="card col-4">
+    <div class="card-hd"><i class="code">NET</i><h2>访问端口</h2><span class="hd-line"></span></div>
+    <label class="row">端口 <input type="number" id="port-v" min="1" max="65535"></label>
+    <div class="btns"><button id="port-save">保存并重启应用</button></div>
+    <p class="hint">写入 settings.conf 后自动重启；若通过应用中心打开，请改用新端口访问。</p>
+  </section>
+
+  <section class="card col-8" id="card-scripts">
+    <div class="card-hd"><i class="code">RUN</i><h2>脚本修复窗口</h2><span class="hd-line"></span><span class="hd-dot"></span></div>
+    <div id="drop" class="drop">
+      <svg class="up" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
+      把 <b>.sh</b> 脚本拖到这里上传，或
+      <label class="filebtn">选择文件<input type="file" id="file" accept=".sh,.txt" hidden></label>
+    </div>
+    <div class="script-list" id="scripts"></div>
+    <div class="term">
+      <div class="term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>EXECUTION LOG</span><b id="term-cur">_</b></div>
+      <div class="logbox" id="log">// 运行输出会显示在这里</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

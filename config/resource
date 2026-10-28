@@ -1,0 +1,12 @@
+{
+    "data-share": {
+        "shares": [
+            {
+                "name": "wocyber_S2-scripts",
+                "permission": {
+                    "rw": ["wocyber_S2"]
+                }
+            }
+        ]
+    }
+}

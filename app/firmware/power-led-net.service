@@ -1,0 +1,13 @@
+[Unit]
+Description=Power LED network link indicator (green=link up, red blink=no link)
+After=local-fs.target systemd-udev-settle.service
+Before=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/power-led-net.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

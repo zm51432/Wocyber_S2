@@ -1,0 +1,24 @@
+#!/bin/bash
+# 安装前：环境检查（不要阻断安装，只做提示 / 关键依赖校验）
+APP_NAME="${TRIM_APPNAME:-wocyber_S2}"
+LOG_OUT="${TRIM_TEMP_LOGFILE:-/dev/null}"
+
+PY=""
+for p in python3 /usr/bin/python3 python; do
+    if command -v "$p" >/dev/null 2>&1; then PY="$(command -v "$p")"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "系统中未找到 python3，S2 硬件控制台无法运行。" > "$LOG_OUT"
+    exit 1
+fi
+
+PORT="${wizard_port:-18899}"
+case "$PORT" in
+    ''|*[!0-9]*) echo "端口必须是数字：${PORT}" > "$LOG_OUT"; exit 1 ;;
+esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+    echo "端口范围需在 1-65535 之间：${PORT}" > "$LOG_OUT"
+    exit 1
+fi
+
+exit 0

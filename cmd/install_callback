@@ -1,0 +1,187 @@
+#!/bin/bash
+# 安装后：写 settings.conf、生成预置修复脚本、部署全部硬件定制脚本、按需安装开机灯光服务
+set -u
+APP_NAME="${TRIM_APPNAME:-wocyber_S2}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
+DEST="${TRIM_APPDEST:-/var/apps/${APP_NAME}/target}"
+SHARE_DIR="${TRIM_DATA_SHARE_PATHS%%:*}"
+
+mkdir -p "$ETC_DIR" "$VAR_DIR/scripts" "$VAR_DIR/jobs" "$VAR_DIR/logs"
+
+# ---- settings.conf：端口的唯一权威来源 ----
+PORT="${wizard_port:-${TRIM_SERVICE_PORT:-18899}}"
+TOKEN=""
+if [ "${wizard_enable_token:-false}" = "true" ]; then TOKEN="${wizard_token:-}"; fi
+BOOT_SVC="${wizard_install_boot_service:-true}"
+{
+    echo "# S2 硬件控制台 运行时配置（由 install_callback / config_callback 写入）"
+    echo "PORT=${PORT}"
+    echo "TOKEN=${TOKEN}"
+    echo "INSTALL_BOOT_SERVICE=${BOOT_SVC}"
+} > "${ETC_DIR}/settings.conf"
+chmod 600 "${ETC_DIR}/settings.conf"
+
+# ---- 定位 fpk 内嵌的硬件脚本目录（兼容新旧 fnOS 的 APPDEST 布局）----
+FIRMWARE_DIR=""
+if   [ -d "${DEST}/firmware" ]; then        FIRMWARE_DIR="${DEST}/firmware"
+elif [ -d "${DEST}/target/firmware" ]; then FIRMWARE_DIR="${DEST}/target/firmware"
+elif [ -d "/var/apps/${APP_NAME}/firmware" ]; then        FIRMWARE_DIR="/var/apps/${APP_NAME}/firmware"
+elif [ -d "/var/apps/${APP_NAME}/target/firmware" ]; then FIRMWARE_DIR="/var/apps/${APP_NAME}/target/firmware"
+fi
+
+# ---- 预置修复脚本：页面「脚本修复」里一键执行 ----
+S="$VAR_DIR/scripts"
+
+# 统一的「寻找硬件脚本源」逻辑，供下面各脚本复用
+# 优先用 fpk 内嵌目录，其次 selfheal 备份目录，最后镜像出厂目录
+cat > "$S/_common.sh" <<'EOS'
+#!/bin/bash
+# 返回第一个存在的硬件脚本源目录（fpk 内嵌优先）
+_s2_firmware_dirs() {
+  local FPK="${TRIM_APPDEST:-/var/apps/wocyber_S2}"
+  for d in "$FPK/firmware" "$FPK/target/firmware" \
+           /usr/local/share/install-1014 /home/anna/install-1014; do
+    [ -d "$d" ] && echo "$d"
+  done
+}
+# 在候选目录里找第一个存在的文件 $1，输出绝对路径；找不到输出空
+_s2_find_file() {
+  local f
+  for d in $(_s2_firmware_dirs); do
+    if [ -f "$d/$1" ]; then echo "$d/$1"; return 0; fi
+  done
+  return 1
+}
+EOS
+
+cat > "$S/00-部署全部硬件配置.sh" <<'EOS'
+#!/bin/bash
+# 用 fpk 内嵌的 deploy.sh 重新部署全部硬件定制脚本（安全、不重启）
+set -u
+source "$(dirname "$0")/_common.sh"
+for d in $(_s2_firmware_dirs); do
+  if [ -f "$d/deploy.sh" ]; then
+    echo "==> 部署: $d/deploy.sh"
+    bash "$d/deploy.sh" "$d"
+    echo "==> 完成，退出码 $?"
+    exit 0
+  fi
+done
+echo "!! 未找到 deploy.sh（fpk 内嵌目录或 /usr/local/share/install-1014）"
+exit 1
+EOS
+
+cat > "$S/10-重装定制功能.sh" <<'EOS'
+#!/bin/bash
+# 完整重装（install_all.sh，含 enable --now，部分项需重启生效）
+set -u
+source "$(dirname "$0")/_common.sh"
+SRC="$(_s2_find_file install_all.sh)"
+if [ -n "$SRC" ]; then
+  echo "==> 使用安装源: $SRC"
+  D="$(dirname "$SRC")"
+  bash "$SRC" --pre-reboot
+  echo "==> 完成，退出码 $?"
+  exit 0
+fi
+echo "!! 未找到 install_all.sh"
+exit 1
+EOS
+
+cat > "$S/20-恢复定制DTB.sh" <<'EOS'
+#!/bin/bash
+# 把定制 DTB 装回 /boot/dtb（升级内核后 SATA/LED 失效时用它）
+set -u
+DST=/boot/dtb/rockchip/rk3568-nanopi-r5s.dtb
+source "$(dirname "$0")/_common.sh"
+SRC="$(_s2_find_file rk3568-nanopi-r5s-new.dtb)"
+if [ -z "$SRC" ]; then echo "!! 找不到定制 DTB 源文件"; exit 1; fi
+echo "==> $SRC -> $DST"
+cp -f "$SRC" "$DST" && echo "==> 已恢复，重启后生效"
+md5sum "$SRC" "$DST"
+EOS
+
+cat > "$S/30-重启硬件服务.sh" <<'EOS'
+#!/bin/bash
+# 重启本机的硬件相关服务
+for s in fan-control sata-led-manager sata-led-enable power-led-net power-key-daemon random-mac selfheal set-hostname boot-version-guard; do
+    if systemctl list-unit-files 2>/dev/null | grep -q "^${s}.service"; then
+        echo "==> restart $s"
+        systemctl restart "$s" 2>&1 | head -3
+        systemctl is-active "$s" 2>/dev/null | sed "s/^/   状态: /"
+    fi
+done
+echo "==> 完成"
+EOS
+
+cat > "$S/40-自检并修复.sh" <<'EOS'
+#!/bin/bash
+# 调用自愈脚本体检（不重启）
+set -u
+source "$(dirname "$0")/_common.sh"
+SRC="$(_s2_find_file selfheal-check.sh)"
+if [ -n "$SRC" ]; then
+  bash "$SRC" --no-reboot
+else
+  echo "!! 未找到 selfheal-check.sh"
+  exit 1
+fi
+EOS
+
+cat > "$S/50-收集诊断信息.sh" <<'EOS'
+#!/bin/bash
+echo "===== 主机名 / 内核 ====="
+hostname; uname -a
+echo; echo "===== 温度与风扇 ====="
+[ -r /var/lib/fan-control/status ] && cat /var/lib/fan-control/status || echo "(无状态文件)"
+command -v fanctl >/dev/null && fanctl status | head -20
+echo; echo "===== 硬盘 ====="
+lsblk -d -o NAME,SIZE,MODEL 2>/dev/null
+echo; echo "===== 硬件服务状态 ====="
+for s in fan-control sata-led-manager sata-led-enable power-led-net power-key-daemon set-hostname selfheal boot-version-guard; do
+    printf '%-20s %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null || echo '-')"
+done
+echo; echo "===== LED ====="
+ls /sys/class/leds 2>/dev/null
+echo; echo "===== 日志尾部 ====="
+tail -n 15 /var/log/sata-led.log 2>/dev/null
+EOS
+
+chmod +x "$S"/*.sh 2>/dev/null
+
+# ---- 安装即部署：把全部硬件定制脚本落到系统并启用服务 ----
+if [ -n "$FIRMWARE_DIR" ] && [ -f "$FIRMWARE_DIR/deploy.sh" ]; then
+    echo "==> 部署硬件定制脚本: $FIRMWARE_DIR" >> "$VAR_DIR/server.log" 2>/dev/null
+    bash "$FIRMWARE_DIR/deploy.sh" "$FIRMWARE_DIR" >> "$VAR_DIR/server.log" 2>&1 || \
+        echo "!! deploy.sh 返回非零（已忽略，详见 /var/log/s2hwctl-deploy.log）" >> "$VAR_DIR/server.log" 2>/dev/null
+else
+    echo "!! 未找到 fpk 内嵌硬件脚本目录，跳过自动部署（可手动在「脚本修复」部署）" >> "$VAR_DIR/server.log" 2>/dev/null
+fi
+
+# ---- 共享目录里放一份 README，方便用户从「文件管理 → 应用文件」丢脚本进来 ----
+if [ -n "$SHARE_DIR" ] && [ -d "$SHARE_DIR" ]; then
+    cat > "$SHARE_DIR/把脚本拖到这里.txt" <<'EOT'
+把 .sh 脚本复制到本目录，即可在 S2 硬件控制台的「脚本修复」页面中看到并执行。
+也可直接在页面里把脚本拖进虚线框上传。
+EOT
+fi
+
+# ---- 开机自动套用电源灯配置 ----
+# v1.1.4 起电源灯由 power-led-net（网络状态灯：有链路绿灯常亮、无链路红灯闪烁）常驻接管；
+# 仅当部署失败（power-led-net 未落盘）时，才安装旧的 s2-power-led 开机套用服务作兜底。
+if [ "$BOOT_SVC" = "true" ] && [ ! -f /etc/systemd/system/power-led-net.service ]; then
+    if [ -d /run/systemd/system ] || [ -d /lib/systemd/system ]; then
+        echo "==> power-led-net 未部署，回退安装 s2-power-led 兜底" >> "$VAR_DIR/server.log" 2>/dev/null
+        install -m 755 "${DEST}/agent/s2-power-led-apply.sh" /usr/local/sbin/s2-power-led-apply.sh 2>/dev/null
+        install -m 644 "${DEST}/agent/s2-power-led.service" /etc/systemd/system/s2-power-led.service 2>/dev/null
+        systemctl daemon-reload >/dev/null 2>&1
+        systemctl enable s2-power-led.service >/dev/null 2>&1
+        systemctl start s2-power-led.service >/dev/null 2>&1
+    fi
+fi
+
+# ---- CLI 软链由 resource/usr-local-linker 处理，这里兜底一次 ----
+[ -f "${DEST}/bin/s2hwctl-cli" ] && install -m 755 "${DEST}/bin/s2hwctl-cli" /usr/local/bin/s2hwctl-cli 2>/dev/null
+
+exit 0

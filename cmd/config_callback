@@ -1,0 +1,23 @@
+#!/bin/bash
+# 配置变更后：把新端口写进 settings.conf（应用中心随后会重启应用）
+set -u
+APP_NAME="${TRIM_APPNAME:-wocyber_S2}"
+ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
+mkdir -p "$ETC_DIR"
+PORT="${wizard_port:-}"
+[ -z "$PORT" ] && exit 0
+
+TOKEN=""
+if [ -f "${ETC_DIR}/settings.conf" ]; then
+    TOKEN="$(grep -E '^TOKEN=' "${ETC_DIR}/settings.conf" | tail -1 | cut -d= -f2-)"
+fi
+BOOT_SVC="$(grep -E '^INSTALL_BOOT_SERVICE=' "${ETC_DIR}/settings.conf" 2>/dev/null | tail -1 | cut -d= -f2-)"
+[ -z "$BOOT_SVC" ] && BOOT_SVC=true
+{
+    echo "# S2 硬件控制台 运行时配置（由 install_callback / config_callback 写入）"
+    echo "PORT=${PORT}"
+    echo "TOKEN=${TOKEN}"
+    echo "INSTALL_BOOT_SERVICE=${BOOT_SVC}"
+} > "${ETC_DIR}/settings.conf"
+chmod 600 "${ETC_DIR}/settings.conf"
+exit 0

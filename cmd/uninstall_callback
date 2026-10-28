@@ -1,0 +1,9 @@
+#!/bin/bash
+# 卸载后：按向导选择决定是否清理数据
+set -u
+VAR_DIR="${TRIM_PKGVAR:-/var/apps/${TRIM_APPNAME:-wocyber_S2}/var}"
+rm -f /usr/local/sbin/s2-power-led-apply.sh
+if [ "${wizard_data_action:-keep}" = "delete" ]; then
+    rm -rf "${VAR_DIR}" "${TRIM_DATA_SHARE_PATHS}" 2>/dev/null
+fi
+exit 0

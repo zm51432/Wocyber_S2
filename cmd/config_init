@@ -1,0 +1,13 @@
+#!/bin/bash
+# 配置变更前：校验端口
+LOG_OUT="${TRIM_TEMP_LOGFILE:-/dev/null}"
+PORT="${wizard_port:-}"
+[ -z "$PORT" ] && exit 0
+case "$PORT" in
+    ''|*[!0-9]*) echo "端口必须是数字：${PORT}" > "$LOG_OUT"; exit 1 ;;
+esac
+if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
+    echo "端口范围需在 1-65535 之间：${PORT}" > "$LOG_OUT"
+    exit 1
+fi
+exit 0

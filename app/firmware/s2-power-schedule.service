@@ -1,0 +1,12 @@
+[Unit]
+Description=S2 定时开关机（开机应用调度）
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/s2-power-schedule.sh apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
