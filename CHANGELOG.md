@@ -1,10 +1,19 @@
 # wocyber_S2 改动记录
 
-- **当前版本**：`wocyber_S2.fpk` v1.3.4
-- **相对版本**：Ben 分支上一版 v1.3.3
-- **改动文件**：`manifest`（`version`、`changelog`、`maintainer_url`、`distributor_url`）、`server/public/index.html`、`server/public/app.js`、`server/public/style.css`
+- **当前版本**：`wocyber_S2.fpk` v1.3.5
+- **相对版本**：上一版 v1.3.4
+- **改动文件**：`manifest`（`version`、`changelog`）、`server/public/index.html`、`server/public/app.js`、`server/public/style.css`
 
-## v1.3.4 改动明细（本次）
+## v1.3.5 改动明细（本次）
+
+### 7. 风扇温控逻辑反转 + 固定阈值（`index.html` / `app.js` / `style.css`）
+- **自动温控模式（锁定）**：采用固定阈值，**不再显示调节窗口**。阈值固定为 CPU `50 / 60 / 70 / 80 ℃`、硬盘 `40 / 50 / 55 / 60 ℃`。
+  - 控制台上改为显示「THERMAL CURVE · 温控曲线（自动锁定）」说明块，仅展示固定阈值、不可编辑。
+  - 应用保存时强制写入上述固定值（即便配置文件里是旧值也会被覆盖）。
+- **手动调节模式（开放）**：显示可编辑的「THERMAL CURVE · 温控曲线（手动可调）」窗口，8 个参数输入框放开，用户可自行调整（上限仍为 100）。
+- **联动逻辑**：`applyFanMode()` 反转——自动时显示锁定说明、隐藏曲线窗口；手动时隐藏锁定说明、显示曲线窗口。自动固定值写入隐藏输入框，避免被配置回写覆盖。
+
+## v1.3.4 改动明细（上版）
 
 ### 6. 风扇控制面板改版（`index.html` / `app.js` / `style.css`）
 - **自动温控模式**：切换后下方「THERMAL CURVE · 温控曲线」参数设置**自动展开显示**（新增 `applyFanMode()` 联动）。
@@ -29,4 +38,4 @@
 - 最终布局：左 2/3 饼图 + 趋势同框，右 1/3 SERVICE MATRIX 竖排。
 
 ## 说明
-飞牛应用商店依据 `manifest` 的 `version` 字段判断升级。本版已升到 `1.3.4`，应用商店会向 v1.3.3 用户提示升级。
+飞牛应用商店依据 `manifest` 的 `version` 字段判断升级。本版已升到 `1.3.5`，应用商店会向 v1.3.4 用户提示升级。
