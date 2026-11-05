@@ -105,13 +105,19 @@ PY
 }
 
 # -------- 下载 / 校验 --------
+# 失败即报错（-f）：避免把 GitHub 的 4xx/5xx/限流 HTML 当 fpk 落盘；
+# 重试 3 次应对瞬时网络抖动 / CDN 限流。
 download(){
-  local url="$1" out="$2"
-  if command -v curl >/dev/null 2>&1; then
-    curl -sSL -m 120 "$url" -o "$out" 2>/dev/null && [ -s "$out" ]
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -T 120 -O "$out" "$url" 2>/dev/null && [ -s "$out" ]
-  else return 1; fi
+  local url="$1" out="$2" i rc=1
+  for i in 1 2 3; do
+    if command -v curl >/dev/null 2>&1; then
+      curl -sSLf -m 120 "$url" -o "$out" 2>/dev/null && [ -s "$out" ] && { rc=0; break; }
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q -T 120 -O "$out" "$url" 2>/dev/null && [ -s "$out" ] && { rc=0; break; }
+    else return 1; fi
+    [ "$i" -lt 3 ] && sleep 3
+  done
+  return $rc
 }
 validate_fpk(){
   local f="$1"
