@@ -2,7 +2,7 @@
 # ============================================================================
 # deploy-autoupdate.sh —— wocyber_S2 一键升级脚本（v1.3.12 → v1.3.13+）
 #
-# 适用：已经安装了旧版 wocyber_S2 fpk（v1.3.12 及更早）的飞牛 fnOS 设备。
+# 适用：已经安装了旧版 wocyber_S2 fpk（v1.3.13 及更早）的飞牛 fnOS 设备。
 # 用法（两种任选其一，全程无需 SSH）：
 #   ① 浏览器打开 wocyber_S2 控制台 → 「脚本修复」卡片 → 把本文件拖进
 #      修复窗口 → 自动执行并实时显示日志；
@@ -33,7 +33,8 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 # ---------- 1) 定位本机安装目录 ----------
-APP_ROOT="/var/apps/wocyber_S2"
+PKG_ROOT="/var/apps/wocyber_S2"           # fnOS 包根（cmd/ config/ manifest 在这里）
+APP_ROOT="$PKG_ROOT"                       # 应用主体（app.tgz 扁平落地点）
 if   [ -d "$APP_ROOT/server" ];       then :;
 elif [ -d "$APP_ROOT/target/server" ]; then APP_ROOT="$APP_ROOT/target";
 elif [ -d "$APP_ROOT/app/server" ];   then APP_ROOT="$APP_ROOT/app";
@@ -44,9 +45,15 @@ fi
 VAR_DIR="${TRIM_PKGVAR:-/var/apps/wocyber_S2/var}"
 LOG="$VAR_DIR/autoupdate.log"
 mkdir -p "$VAR_DIR" 2>/dev/null || true
-say "本机安装目录: $APP_ROOT"
+say "包根: $PKG_ROOT ；应用主体: $APP_ROOT"
 
-CURRENT="$(grep -m1 '^version=' "$APP_ROOT/manifest" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')"
+CURRENT=""
+for f in "$PKG_ROOT/manifest" "$APP_ROOT/manifest" "$VAR_DIR/version"; do
+  if [ -f "$f" ]; then
+    CURRENT="$(grep -m1 '^version=' "$f" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]')"
+    [ -n "$CURRENT" ] && break
+  fi
+done
 [ -n "$CURRENT" ] || CURRENT="0.0.0"
 say "当前版本: $CURRENT"
 
@@ -86,21 +93,18 @@ if [ -z "$LATEST" ] || [ -z "$DL" ]; then
 fi
 say "GitHub 最新版本: $LATEST (tag: $TAG)"
 
-# 版本比较：latest > current 才升级
+# 版本比较：latest > current 才升级（返回 0 = 更新）
 ver_gt(){
   local a="$1" b="$2"
   [ "$a" = "$b" ] && return 1
-  local IFS=. a1 a2 a3 b1 b2 b3
-  read -r a1 a2 a3 _ <<< "$(echo "$a" | sed 's/\./ /g')"
-  read -r b1 b2 b3 _ <<< "$(echo "$b" | sed 's/\./ /g')"
-  a1=${a1:-0}; a2=${a2:-0}; a3=${a3:-0}
-  b1=${b1:-0}; b2=${b2:-0}; b3=${b3:-0}
-  if   [ "$a1" -gt "$b1" ]; then return 0
-  elif [ "$a1" -lt "$b1" ]; then return 1
-  elif [ "$a2" -gt "$b2" ]; then return 0
-  elif [ "$a2" -lt "$b2" ]; then return 1
-  elif [ "$a3" -gt "$b3" ]; then return 0
-  else return 1; fi
+  local IFS=.
+  local ax=($a) bx=($b) i an bn
+  for i in 0 1 2; do
+    an="${ax[$i]:-0}"; bn="${bx[$i]:-0}"
+    [ "$an" -gt "$bn" ] && return 0
+    [ "$an" -lt "$bn" ] && return 1
+  done
+  return 1
 }
 if ! ver_gt "$LATEST" "$CURRENT"; then
   say "本机已是最新（$CURRENT >= $LATEST），无需升级"
@@ -128,7 +132,7 @@ if [ "$MAGIC" != "1f8b" ]; then
   say "ERROR: 校验失败：不是合法 gzip/fpk"; rm -rf "$TMPD"; exit 1
 fi
 tar -tzf "$FPK" 2>/dev/null | grep -q manifest  || { say "ERROR: fpk 内无 manifest"; rm -rf "$TMPD"; exit 1; }
-tar -tzf "$FPK" 2>/dev/null | grep -qE 'install_all\.sh$' || { say "ERROR: fpk 内无 install_all.sh"; rm -rf "$TMPD"; exit 1; }
+tar -tzf "$FPK" 2>/dev/null | grep -q app.tgz  || { say "ERROR: fpk 内无 app.tgz"; rm -rf "$TMPD"; exit 1; }
 
 EX="$TMPD/unpack"; mkdir -p "$EX"
 tar -xzf "$FPK" -C "$EX"
@@ -138,37 +142,45 @@ if [ -z "$NEWVER" ] || ! ver_gt "$NEWVER" "$CURRENT"; then
 fi
 say "校验通过，将升级 $CURRENT → $NEWVER"
 
-# ---------- 4) 备份 ----------
+# ---------- 4) 备份（整个包根：含 target、cmd、config、manifest）----------
 TS="$(date +%Y%m%d_%H%M%S)"
-ROOT_PARENT="$(dirname "$APP_ROOT")"; ROOT_BASE="$(basename "$APP_ROOT")"
-say "备份当前应用 -> var/backup_${ROOT_BASE}_${TS}.tar.gz"
-tar -czf "$VAR_DIR/backup_${ROOT_BASE}_${TS}.tar.gz" -C "$ROOT_PARENT" "$ROOT_BASE" 2>/dev/null
-ls -1t "$VAR_DIR"/backup_${ROOT_BASE}_*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
+say "备份当前应用 -> var/backup_wocyber_S2_${TS}.tar.gz"
+tar -czf "$VAR_DIR/backup_wocyber_S2_${TS}.tar.gz" -C "$(dirname "$PKG_ROOT")" "$(basename "$PKG_ROOT")" 2>/dev/null
+ls -1t "$VAR_DIR"/backup_wocyber_S2_*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
 
 # ---------- 5) 覆盖 + 全量部署 ----------
 APPEX="$TMPD/appex"; mkdir -p "$APPEX"
 tar -xzf "$EX/app.tgz" -C "$APPEX"
+[ -f "$APPEX/install-1014/install_all.sh" ] || { say "ERROR: app.tgz 内无 install-1014/install_all.sh（包不完整）"; rm -rf "$TMPD"; exit 1; }
 cp -a "$APPEX/." "$APP_ROOT/"
-mkdir -p "$APP_ROOT/cmd" "$APP_ROOT/config" "$APP_ROOT/wizard" 2>/dev/null
-cp -a "$EX/cmd/."     "$APP_ROOT/cmd/"
-cp -f "$EX/manifest"  "$APP_ROOT/manifest"
-cp -a "$EX/config/."  "$APP_ROOT/config/"  2>/dev/null
-cp -a "$EX/wizard/."  "$APP_ROOT/wizard/"  2>/dev/null
+mkdir -p "$PKG_ROOT/cmd" "$PKG_ROOT/config" "$PKG_ROOT/wizard" 2>/dev/null
+cp -a "$EX/cmd/."     "$PKG_ROOT/cmd/"
+cp -f "$EX/manifest"  "$PKG_ROOT/manifest"
+cp -f "$EX/manifest"  "$APP_ROOT/manifest" 2>/dev/null
+cp -a "$EX/config/."  "$PKG_ROOT/config/"  2>/dev/null
+cp -a "$EX/wizard/."  "$PKG_ROOT/wizard/"  2>/dev/null
+echo "$NEWVER" > "$VAR_DIR/version"
+rm -rf "$TMPD"
 say "文件覆盖完成，执行全量部署（install_all.sh / upgrade_callback）..."
-if [ -x "$APP_ROOT/cmd/upgrade_callback" ]; then
-  TRIM_APPDEST="$APP_ROOT" bash "$APP_ROOT/cmd/upgrade_callback" </dev/null
+CB=""
+if [ -x "$PKG_ROOT/cmd/upgrade_callback" ]; then CB="$PKG_ROOT/cmd/upgrade_callback"; CBDEST="$PKG_ROOT";
+elif [ -x "$APP_ROOT/cmd/upgrade_callback" ]; then CB="$APP_ROOT/cmd/upgrade_callback"; CBDEST="$APP_ROOT";
+fi
+if [ -n "$CB" ]; then
+  TRIM_APPDEST="$CBDEST" bash "$CB" </dev/null
 else
   bash "$APP_ROOT/install-1014/install_all.sh" </dev/null
 fi
-echo "$NEWVER" > "$VAR_DIR/version"
-rm -rf "$TMPD"
 
 # ---------- 6) 重启控制台 ----------
 say "重启控制台 ..."
-if [ -x "$APP_ROOT/cmd/main" ]; then
-  bash "$APP_ROOT/cmd/main" stop  >/dev/null 2>&1
+MAIN=""
+if [ -x "$PKG_ROOT/cmd/main" ]; then MAIN="$PKG_ROOT/cmd/main";
+elif [ -x "$APP_ROOT/cmd/main" ]; then MAIN="$APP_ROOT/cmd/main"; fi
+if [ -n "$MAIN" ]; then
+  bash "$MAIN" stop  >/dev/null 2>&1
   sleep 1
-  bash "$APP_ROOT/cmd/main" start >/dev/null 2>&1
+  bash "$MAIN" start >/dev/null 2>&1
 fi
 say "升级完成：$CURRENT → $NEWVER"
 say "自动更新服务已部署（每天 04:30 检测新版本并自动升级）"
