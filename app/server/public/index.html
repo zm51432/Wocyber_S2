@@ -92,6 +92,18 @@
     </div>
   </section>
 
+  <!-- ================= 版本与更新 ================= -->
+  <section class="card col-4" id="card-update">
+    <div class="card-hd"><i class="code">UPD</i><h2>版本与更新</h2><span class="hd-line"></span><span class="hd-tag" id="up-tag">—</span></div>
+    <div class="state">当前版本 <b id="up-current">—</b></div>
+    <div class="state">最新版本 <b id="up-latest">检测中…</b></div>
+    <div class="btns">
+      <button id="up-check">检查更新</button>
+      <button class="ghost" id="up-upgrade" disabled>立即升级</button>
+    </div>
+    <p class="hint" id="up-hint">自动更新默认开启：每日检测 GitHub 上的 wocyber_S2 新版本并自动升级。可在 settings.conf 设 AUTO_UPDATE=false 关闭。</p>
+  </section>
+
   <!-- ================= 灯光阵列 ================= -->
   <section class="card col-4">
     <div class="card-hd"><i class="code">PWR</i><h2>电源灯</h2><span class="hd-line"></span><span class="bulb" id="p-bulb"></span></div>

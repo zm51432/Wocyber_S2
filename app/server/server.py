@@ -255,6 +255,43 @@ class Handler(BaseHTTPRequestHandler):
                 start_new_session=True)
             self._json({"ok": True, "msg": msg or "应用正在重启"})
 
+        elif path == "/api/autoupdate":
+            action = body.get("action", "status")
+            # 定位自动更新脚本：优先 /usr/local/sbin（install_all.sh 部署位置），回退 fpk 内置
+            script = "/usr/local/sbin/s2-autoupdate.sh"
+            if not os.path.exists(script):
+                for cand in ("/var/apps/wocyber_S2/s2-autoupdate.sh",
+                            os.path.join(os.environ.get("S2_APP_DEST", "/var/apps/wocyber_S2"), "s2-autoupdate.sh")):
+                    if os.path.exists(cand):
+                        script = cand
+                        break
+            if action == "upgrade":
+                if not os.path.exists(script):
+                    self._json({"ok": False, "msg": "未找到自动更新脚本（请先重新部署/安装）"})
+                    return
+                # 脱离当前进程后台运行，避免重启控制台时把升级脚本一起杀掉
+                subprocess.Popen(
+                    ["bash", script, "run", "--force"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    start_new_session=True)
+                self._json({"ok": True, "msg": "已开始升级，稍后刷新本页查看版本变化"})
+                return
+            if not os.path.exists(script):
+                self._json({"ok": True, "current": "", "latest": "",
+                            "update_available": False,
+                            "result": "未找到自动更新脚本（请先重新部署/安装）"})
+                return
+            try:
+                out = subprocess.run(["bash", script, action], capture_output=True,
+                                     text=True, timeout=30).stdout
+                try:
+                    self._json(json.loads(out))
+                except Exception:
+                    self._json({"ok": True, "raw": out.strip()})
+            except subprocess.TimeoutExpired:
+                self._json({"ok": False, "msg": "检测超时（GitHub 可能限流，稍后重试）"})
+
         else:
             self._json({"ok": False, "msg": "未知接口"}, 404)
 

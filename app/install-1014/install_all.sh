@@ -101,6 +101,7 @@ REQUIRED_FILES=(
   "fan-control.sh" "fan-control.service" "fan-control.conf" "fanctl"
   "fan-api.py" "fan-api.service" "fan-api.conf" "drivetemp.conf"
   "s2-power-schedule.sh" "s2-power-schedule.service" "s2-power-shutdown.service" "s2-power-shutdown.timer" "s2-power-schedule.conf"
+  "s2-autoupdate.sh" "s2-autoupdate.service" "s2-autoupdate.timer"
 )
 
 for f in "${REQUIRED_FILES[@]}"; do
@@ -216,6 +217,12 @@ inst "${DIR}/s2-power-shutdown.timer" /etc/systemd/system/s2-power-shutdown.time
 inst "${DIR}/s2-power-schedule.conf" /etc/s2-power-schedule.conf 644
 echo "ℹ️  定时开关机已安装（默认关闭，由控制台「定时开关机」卡片配置后生效）"
 
+# 自动更新（GitHub 检测新版本并自升级 fpk 软件）
+inst "${DIR}/s2-autoupdate.sh" /usr/local/sbin/s2-autoupdate.sh 755
+inst "${DIR}/s2-autoupdate.service" /etc/systemd/system/s2-autoupdate.service 644
+inst "${DIR}/s2-autoupdate.timer" /etc/systemd/system/s2-autoupdate.timer 644
+echo "ℹ️  自动更新已安装（默认开启：每日检测 GitHub 新版本并自动升级；settings.conf 设 AUTO_UPDATE=false 可关闭）"
+
 if [[ -f "${SRC_DTB}" ]]; then
   if [[ -f "${DST_DTB}" ]]; then
     BACKUP_DTB="${DST_DTB}.bak_${TS}"
@@ -259,6 +266,10 @@ SERVICES=(beep-boot.service power-led-net.service sata-led-enable.service sata-l
 for svc in "${SERVICES[@]}"; do
   sctl_start "${svc}"
 done
+
+# 自动更新定时器（每日检测 GitHub 新版本并自动升级）
+timeout "${SCTL_TMO}" systemctl daemon-reload 2>&1 || true
+timeout "${SCTL_TMO}" systemctl enable s2-autoupdate.timer 2>&1 || true
 
 # 每小时自检（只修复、不重启；enable 后由 timers.target 拉起，无需 --now）
 timeout "${SCTL_TMO}" systemctl enable selfheal-hourly.timer 2>&1 || true

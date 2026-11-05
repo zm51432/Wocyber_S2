@@ -168,6 +168,7 @@ main.grid{
   border:1px solid rgba(43,255,163,.28);background:rgba(43,255,163,.07);white-space:nowrap;
 }
 .hd-tag.alert{color:var(--err);border-color:rgba(255,74,99,.3);background:rgba(255,74,99,.08)}
+.hd-tag.warn{color:#ffb84d;border-color:rgba(255,184,77,.3);background:rgba(255,184,77,.08)}
 
 /* ================= 运行总览 ================= */
 .ov-body{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}

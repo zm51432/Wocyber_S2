@@ -1,8 +1,23 @@
 # wocyber_S2 改动记录
 
-- **当前版本**：`wocyber_S2.fpk` v1.3.12
-- **相对版本**：上一版 v1.3.5
-- **改动文件**：`manifest`（`version`、`changelog`）、`firmware/selfheal-hourly.timer`、`install-1014/selfheal-check.sh`、`cmd/install_callback`、`cmd/upgrade_callback`、`server/public/index.html`、`server/public/app.js`、`firmware/fan-control.sh`、`install-1014/power-led-net.sh`、`install-1014/sata-led-manager.sh` 等
+- **当前版本**：`wocyber_S2.fpk` v1.3.13
+- **相对版本**：上一版 v1.3.12
+- **改动文件**：`manifest`（`version`、`changelog`）、新增 `firmware/s2-autoupdate.sh`、`firmware/s2-autoupdate.service`、`firmware/s2-autoupdate.timer`（及 `install-1014/` 同步副本）、`firmware/install_all.sh`（及 `install-1014/` 副本）、`server/server.py`、`server/public/index.html`、`server/public/app.js`、`server/public/style.css`
+
+## v1.3.13 改动明细（本次）
+
+### ① GitHub 自动更新（fpk 自升级）
+- 新增 `s2-autoupdate.sh`（安装到 `/usr/local/sbin`）：检测本项目 GitHub 最新 Release；若版本高于本机，自动下载 `wocyber_S2.fpk` → 校验（gzip/tar 合法 + manifest 版本确实更新）→ 整包备份（`var/backup_*`，保留 3 份）→ 覆盖 `/var/apps/wocyber_S2` → 重跑 `install_all.sh` 全量部署 → 自动重启控制台。
+- 子命令：`status`（读缓存不联网）/ `check`（仅检测）/ `run`（自动升级，`--force` 强制忽略开关）；日志 `var/autoupdate.log`。
+- 新增 `s2-autoupdate.timer`：每天 04:30（±30 分钟随机延迟）跑一次 `run`，开机 10 分钟后首查。
+- 总开关：`etc/settings.conf` 中 `AUTO_UPDATE=true`（默认）；设为 `false` 则只提醒不升级，「立即升级」按钮可强制。
+
+### ② 控制台「版本与更新」卡片（UI）
+- 显示当前版本 / 最新版本；页面打开自动静默检测一次；可点「检查更新」；有更新时「立即升级」按钮可用，点击后全自动升级并自动重启控制台。
+- `server.py` 新增 `/api/autoupdate` 端点（`status` / `check` / `upgrade` 三个动作，升级在独立会话后台执行）。
+
+### ③ 既有安装直接升级（修复脚本）
+- 对已装 v1.3.12 的设备，可拖入控制台「脚本修复」窗口执行 `deploy-autoupdate.sh`（随 Release 一并发布）：自动下载 v1.3.13 fpk → 备份 → 覆盖 → 全量部署（含 s2-autoupdate 定时器）→ 重启控制台，无需 SSH、无需卸载重装。
 
 ## v1.3.12 累计改动（v1.3.6 – v1.3.12）
 

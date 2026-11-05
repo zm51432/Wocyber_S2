@@ -472,6 +472,10 @@ function bind() {
     setTimeout(() => { location.href = location.protocol + '//' + location.hostname + ':' + p + '/'; }, 6000);
   };
 
+  // 版本与更新
+  $('#up-check').onclick = () => checkUpdate(false);
+  $('#up-upgrade').onclick = () => doUpgrade();
+
   // 拖放上传
   const drop = $('#drop');
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => {
@@ -492,6 +496,57 @@ async function upload(file) {
   const r = await api('/api/script/save', { name: file.name, content: text });
   toast(r.msg || '上传完成', r.ok);
   if (r.ok && r.scripts) renderScripts(r.scripts);
+}
+
+async function checkUpdate(silent) {
+  let r;
+  try {
+    r = await api('/api/autoupdate', { action: 'check' });
+  } catch (e) {
+    $('#up-latest').textContent = '检测失败';
+    $('#up-tag').textContent = '未知';
+    return;
+  }
+  const cur = r.current || '—';
+  const latest = r.latest || '检测失败';
+  $('#up-current').textContent = cur;
+  $('#up-latest').textContent = latest;
+  const tag = $('#up-tag');
+  if (r.update_available) {
+    tag.textContent = '有更新';
+    tag.className = 'hd-tag warn';
+    $('#up-upgrade').disabled = false;
+    $('#up-hint').textContent = (r.result || '发现新版本，可点击「立即升级」。');
+  } else {
+    tag.textContent = (latest === '检测失败' || !r.latest) ? '未知' : '最新';
+    tag.className = 'hd-tag';
+    $('#up-upgrade').disabled = true;
+    $('#up-hint').textContent = (r.result || '已是最新版本。');
+  }
+  if (!silent && r.result) toast(r.result, true);
+}
+
+async function doUpgrade() {
+  $('#up-upgrade').disabled = true;
+  let r;
+  try {
+    r = await api('/api/autoupdate', { action: 'upgrade' });
+  } catch (e) {
+    toast('升级请求失败', false);
+    $('#up-upgrade').disabled = false;
+    return;
+  }
+  toast(r.msg || '已开始升级', r.ok);
+  if (r.ok) {
+    $('#up-latest').textContent = '升级中…';
+    const tag = $('#up-tag');
+    tag.textContent = '升级中';
+    tag.className = 'hd-tag warn';
+    // 升级会重启控制台，数秒后页面会断开，提示用户等待刷新
+    setTimeout(() => toast('升级完成将自动重启，请稍后刷新页面', true), 1500);
+  } else {
+    $('#up-upgrade').disabled = false;
+  }
 }
 
 async function refresh() {
@@ -549,3 +604,4 @@ initBg();
 refresh();
 startClock();
 setInterval(refresh, 10000);
+checkUpdate(true);   // 进入页面静默检测一次 GitHub 最新版本
