@@ -1,0 +1,14 @@
+[Unit]
+Description=S2 硬件操作代理（root，供 S2硬件控制台调用）
+After=network.target
+
+[Service]
+Type=simple
+Environment=S2_AGENT_PORT=8899
+Environment=S2_HWCTL_DIR=/var/apps/wocyber_S2/target/server
+ExecStart=/usr/bin/python3 /usr/local/sbin/s2hw-agent.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
