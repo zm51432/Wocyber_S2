@@ -170,8 +170,48 @@ main.grid{
 .hd-tag.alert{color:var(--err);border-color:rgba(255,74,99,.3);background:rgba(255,74,99,.08)}
 
 /* ================= 运行总览 ================= */
-.ov-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,330px);gap:18px;align-items:stretch}
-@media(max-width:1180px){.ov-body{grid-template-columns:1fr}}
+.ov-body{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}
+.ov-left{flex:2 1 360px;min-width:0;display:flex}
+.ov-frame{
+  flex:1;display:flex;flex-direction:column;gap:16px;
+  padding:16px 18px 18px;border-radius:14px;
+  border:1px solid var(--stroke);
+  background:linear-gradient(180deg,rgba(34,224,255,.035),rgba(255,255,255,.012));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 0 0 1px rgba(0,0,0,.22);
+}
+.ov-right{flex:1 1 260px;min-width:0;display:flex}
+.ov-right .pane{display:flex;flex-direction:column;flex:1;gap:10px}
+.ov-right .svc{margin-top:2px}
+
+/* 同心环嵌套仪表盘（饼图） */
+.nested-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:8px 0 2px}
+.nested{position:relative;width:clamp(220px,46%,300px);max-width:74vw;aspect-ratio:1;margin:0 auto}
+.nested svg.ng{width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.ng-track{fill:none;stroke-width:9}
+.ng-prog{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .85s cubic-bezier(.2,.7,.3,1),stroke .4s}
+.ng-cpu.ng-track{stroke:rgba(34,224,255,.10)}.ng-cpu.ng-prog{stroke:var(--cy);filter:drop-shadow(0 0 8px rgba(34,224,255,.6))}
+.ng-hdd.ng-track{stroke:rgba(161,125,255,.10)}.ng-hdd.ng-prog{stroke:var(--mg);filter:drop-shadow(0 0 8px rgba(161,125,255,.6))}
+.ng-fan.ng-track{stroke:rgba(255,180,58,.10)}.ng-fan.ng-prog{stroke:var(--warn);filter:drop-shadow(0 0 8px rgba(255,180,58,.6))}
+.ng-prog.warn{filter:drop-shadow(0 0 11px rgba(255,180,58,.85))}
+.ng-prog.crit{filter:drop-shadow(0 0 13px rgba(255,74,99,.95))}
+.ng-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;pointer-events:none}
+.ng-mid b{font:600 46px/1 var(--mono);color:#fff;text-shadow:0 0 28px rgba(34,224,255,.6)}
+.ng-mid em{font:12px/1 var(--mono);font-style:normal;letter-spacing:.12em;color:#aebfd1;margin-top:-3px}
+.ng-cap{font:10px/1 var(--mono);letter-spacing:.22em;color:var(--dim);margin-top:5px}
+.ng-legend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.ng-legend .nl{display:inline-flex;align-items:center;gap:6px;font:11px/1 var(--mono);letter-spacing:.05em;color:var(--sub)}
+.ng-legend .nl i{width:8px;height:8px;border-radius:50%}
+.ng-legend .nl b{color:#e8f3ff;font-weight:600}
+.ng-legend .nl.cpu i{background:var(--cy);box-shadow:0 0 8px var(--cy)}
+.ng-legend .nl.hdd i{background:var(--mg);box-shadow:0 0 8px var(--mg)}
+.ng-legend .nl.fan i{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+
+/* 运行总览响应式：窄屏上下堆叠 */
+@media(max-width:760px){
+  .ov-body{flex-direction:column}
+  .ov-left,.ov-right{flex:1 1 auto}
+  .nested{width:clamp(200px,60%,280px)}
+}
 .gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:12px}
 .gauge{
   --gc:var(--cy);
@@ -228,9 +268,9 @@ main.grid{
 .legend .lg::before{content:"";width:9px;height:2px;background:currentColor}
 .legend .lg.cpu{color:var(--cy)}.legend .lg.hdd{color:var(--mg)}
 .legend .scale{margin-left:auto}
-.svc{display:flex;flex-wrap:wrap;gap:7px}
+.svc{display:flex;flex-direction:column;gap:9px;align-items:stretch}
 .svc span{
-  display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:3px;
+  display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:4px;
   font:10.5px/1 var(--mono);letter-spacing:.03em;
   border:1px solid var(--stroke);background:rgba(255,255,255,.025);color:var(--sub);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
@@ -358,6 +398,16 @@ summary{cursor:pointer;color:var(--sub);font:10.5px/1 var(--mono);letter-spacing
 summary::-webkit-details-marker{display:none}
 summary::before{content:"+";color:var(--cy);font-weight:700;font-size:13px}
 details[open] summary::before{content:"–"}
+.curve-box{margin-top:13px;border-top:1px dashed rgba(140,190,235,.13);padding-top:10px}
+.curve-hd{cursor:default;color:var(--sub);font:10.5px/1 var(--mono);letter-spacing:.13em;display:flex;align-items:center;gap:8px}
+.curve-hd::before{content:"\25BE";color:var(--cy);font-weight:700;font-size:11px;margin-right:2px}
+.curve-box.hidden{display:none}
+.curve-box.lock{opacity:.92}
+.curve-box.lock .curve-hd{color:var(--cy)}
+.lock-row{display:flex;flex-wrap:wrap;gap:10px 22px;margin:8px 0 2px}
+.lock-row .lk{font:600 13px/1 var(--mono);color:var(--sub);letter-spacing:.02em}
+.lock-row .lk b{color:var(--cy);font-weight:700;margin:0 1px}
+
 .hint{color:var(--dim);font-size:11.5px;line-height:1.75;margin:12px 0 0}
 .hint b{color:var(--sub);font-weight:600}
 

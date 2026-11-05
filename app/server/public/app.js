@@ -1,7 +1,8 @@
 /* S2 硬件控制台 前端逻辑 */
 const $ = (s) => document.querySelector(s);
 const state = { conf: null, leds: [] };
-const GAUGE_C = 301.6;          // r=48 的圆周长
+const GAUGE_C = 301.6;
+const NEST = { cpu: 2 * Math.PI * 86, hdd: 2 * Math.PI * 66, fan: 2 * Math.PI * 46 };  // 同心环嵌套仪表盘各环周长          // r=48 的圆周长
 const TREND_N = 40;             // 趋势图采样点数
 const HIST = { cpu: [], hdd: [] };
 let histSeeded = false;
@@ -54,6 +55,21 @@ function setGauge(boxId, valId, val, max, warn, crit) {
   if (ring) ring.style.strokeDashoffset = (GAUGE_C * (1 - p)).toFixed(1);
   if (crit && n >= crit) box.classList.add('crit');
   else if (warn && n >= warn) box.classList.add('warn');
+}
+
+/* ---------- 同心环嵌套仪表盘 ---------- */
+function setRing(id, val, max, warn, crit) {
+  const el = document.querySelector('.ng-prog.ng-' + id);
+  if (!el) return;
+  const C = NEST[id];
+  const n = parseFloat(val);
+  el.style.strokeDasharray = C.toFixed(1);
+  el.classList.remove('warn', 'crit');
+  if (isNaN(n)) { el.style.strokeDashoffset = C; return; }
+  const p = Math.max(0, Math.min(1, n / max));
+  el.style.strokeDashoffset = (C * (1 - p)).toFixed(1);
+  if (crit && n >= crit) el.classList.add('crit');
+  else if (warn && n >= warn) el.classList.add('warn');
 }
 
 /* ---------- 温度趋势 ---------- */
@@ -121,9 +137,16 @@ function diskCount(v) {
 
 /* ---------- 渲染 ---------- */
 function renderStatus(d) {
-  setGauge('g-cpu', 's-cpu', d.cpu_temp, 100, 70, 85);
-  setGauge('g-hdd', 's-hdd', d.hdd_max_temp, 80, 50, 60);
-  setGauge('g-fan', 's-fan', d.fan_level, 15, 11, 14);
+  setRing('cpu', d.cpu_temp, 100, 70, 85);
+  setRing('hdd', d.hdd_max_temp, 80, 50, 60);
+  setRing('fan', d.fan_level, 15, 11, 14);
+  const cpuV = (d.cpu_temp === 0 || d.cpu_temp) ? +d.cpu_temp : null;
+  const hddV = (d.hdd_max_temp === 0 || d.hdd_max_temp) ? +d.hdd_max_temp : null;
+  const sysT = Math.max(cpuV == null ? -Infinity : cpuV, hddV == null ? -Infinity : hddV);
+  $('#ng-temp').textContent = isFinite(sysT) ? sysT : '—';
+  $('#ng-cpu-v').textContent = cpuV == null ? '—' : d.cpu_temp;
+  $('#ng-hdd-v').textContent = hddV == null ? '—' : d.hdd_max_temp;
+  $('#ng-fan-v').textContent = (d.fan_level === 0 || d.fan_level) ? d.fan_level : '—';
   pushTrend(d);
 
   $('#b-uid').textContent = d.root ? 'root 直控' : '应用用户（需代理）';
@@ -159,18 +182,18 @@ function renderStatus(d) {
   nState.className = 'state';
   if (povr === 'off') {
     nState.classList.add('warn');
-    nState.textContent = '// 手动覆盖：电源灯已全灭（优先级最高）';
+    nState.textContent = '手动覆盖：电源灯已全灭（优先级最高）';
     setBulb('p-bulb', 'grey');
   } else if (!nl.deployed) {
     nState.classList.add('warn');
-    nState.textContent = '// 网络状态灯未部署（可在「脚本修复」执行 00-部署全部硬件配置）';
+    nState.textContent = '网络状态灯未部署（可在「脚本修复」执行 00-部署全部硬件配置）';
     setBulb('p-bulb', 'grey');
   } else if (nl.up) {
-    nState.textContent = '// 链路已连接 · ' + (nl.iface || 'up') + ' → 绿灯常亮';
+    nState.textContent = '链路已连接 · ' + (nl.iface || 'up') + ' → 绿灯常亮';
     setBulb('p-bulb', 'g');
   } else {
     nState.classList.add('down');
-    nState.textContent = '// 无网络链路 → 红灯闪烁';
+    nState.textContent = '无网络链路 → 红灯闪烁';
     setBulb('p-bulb', 'rb');
   }
 
@@ -182,19 +205,20 @@ function renderStatus(d) {
   dState.className = 'state';
   if (dovr === 'off') {
     dState.classList.add('warn');
-    dState.textContent = '// 手动覆盖：硬盘灯已全灭（优先级最高）';
+    dState.textContent = '手动覆盖：硬盘灯已全灭（优先级最高）';
     setBulb('d-bulb', 'grey');
   } else if (nDisk > 0) {
-    dState.textContent = '// 检测到 ' + nDisk + ' 块硬盘 → 绿灯常亮';
+    dState.textContent = '检测到硬盘 → 绿灯常亮';
     setBulb('d-bulb', 'g');
   } else {
-    dState.textContent = '// 无硬盘 → 红绿灯全灭';
+    dState.textContent = '无硬盘 → 红绿灯全灭';
     setBulb('d-bulb', 'grey');
   }
 
   /* 风扇 */
   const fc = d.conf.fan || {};
-  $('#f-mode').value = fc.MODE || 'auto';
+  // 后端只存 auto/manual；手动控温在后端仍走 auto，用 FAN_UI_MODE 还原前端标签页
+  $('#f-mode').value = fc.FAN_UI_MODE || (fc.MODE === 'manual' ? 'manual' : 'auto');
   // 手动调节中（或刚调完 5s 内）不回写滑块，否则轮询会把挡位拽回去、手感卡顿
   if (Date.now() - fanTouch > 5000) {
     $('#f-level').value = fc.MANUAL_LEVEL || 6;
@@ -208,6 +232,8 @@ function renderStatus(d) {
   $('#f-c1').value = fc.TEMP_LOW || 65;
   $('#f-c2').value = fc.TEMP_MID || 80;
   $('#f-c3').value = fc.TEMP_CRITICAL || 100;
+  // 模式联动放在曲线赋值之后：避免自动模式的固定值被上面的 config 值覆盖
+  applyFanMode();
   // 扇叶：按当前实际转速旋转，0 挡静止
   $('#f-cur').textContent = (d.fan_level === 0 || d.fan_level) ? d.fan_level : '—';
   const blade = $('#fan-blade');
@@ -336,6 +362,51 @@ function initBg() {
   (function loop() { draw(); requestAnimationFrame(loop); })();
 }
 
+
+/* 自动温控固定阈值（不可调节）：CPU 50/60/70/80℃，硬盘 40/50/55/60℃ */
+const AUTO_CPU = { off: 50, low: 60, mid: 70, crit: 80 };
+const AUTO_HDD = { off: 40, low: 50, mid: 55, max: 60 };
+
+/* 风扇模式联动（三种模式）：
+   自动温控(auto)      -> 显示锁定说明(f-lock)，滑块禁用；
+   手动控温(manual_temp)-> 显示可编辑曲线(f-curve)，滑块禁用（仍是自动调速，只是阈值可改）；
+   手动挡位(manual)    -> 显示说明(f-manual-note)，【滑块可拖动】直接设定固定挡位。 */
+function applyFanMode() {
+  const mode = $('#f-mode').value;
+  const lock = $('#f-lock');
+  const box = $('#f-curve');
+  const mnote = $('#f-manual-note');
+  const lvl = $('#f-level');
+  const lockOn = mode === 'auto';
+  const curveOn = mode === 'manual_temp';
+  const manualOn = mode === 'manual';
+  if (lock) lock.classList.toggle('hidden', !lockOn);      // 自动：显示锁定说明
+  if (box) box.classList.toggle('hidden', !curveOn);        // 手动控温：显示可编辑曲线
+  if (mnote) mnote.classList.toggle('hidden', !manualOn);   // 手动挡位：显示说明
+  if (lvl) lvl.disabled = !manualOn;                       // 仅手动挡位可拖动滑块
+  if (lockOn) {                                            // 自动：固定参数落进隐藏输入框
+    $('#f-h0').value = AUTO_HDD.off; $('#f-h1').value = AUTO_HDD.low;
+    $('#f-h2').value = AUTO_HDD.mid; $('#f-h3').value = AUTO_HDD.max;
+    $('#f-c0').value = AUTO_CPU.off; $('#f-c1').value = AUTO_CPU.low;
+    $('#f-c2').value = AUTO_CPU.mid; $('#f-c3').value = AUTO_CPU.crit;
+  }
+}
+
+/* 组装 set_fan 参数：
+   - 自动温控 / 手动控温 后端都走 auto（自动调速），区别仅在于阈值是否固定；
+   - 手动挡位 后端走 manual（固定挡位）；
+   - 额外带 ui_mode 便于前端刷新后还原标签页。 */
+function fanPayload(persist) {
+  const mode = $('#f-mode').value;
+  let backendMode = 'auto', cpu = AUTO_CPU, hdd = AUTO_HDD;
+  if (mode === 'manual_temp') {
+    cpu = { off: +$('#f-c0').value, low: +$('#f-c1').value, mid: +$('#f-c2').value, crit: +$('#f-c3').value };
+    hdd = { off: +$('#f-h0').value, low: +$('#f-h1').value, mid: +$('#f-h2').value, max: +$('#f-h3').value };
+  } else if (mode === 'manual') {
+    backendMode = 'manual';
+  }
+  return { mode: backendMode, ui_mode: mode, level: +$('#f-level').value, persist, hdd, cpu };
+}
 /* ---------- 事件 ---------- */
 function bind() {
   $('#btn-refresh').onclick = refresh;
@@ -364,6 +435,7 @@ function bind() {
     if ($('#f-mode').value === 'manual') { fanTouch = Date.now(); fanLive(); }
   };
   $('#f-mode').onchange = () => {             // 切到手动：立即按当前挡位生效
+    applyFanMode();
     if ($('#f-mode').value === 'manual') { clearTimeout(fanTimer); fanTouch = Date.now(); fanLive(); }
   };
   $('#b-ms').oninput = (e) => ($('#b-ms-v').textContent = e.target.value);
@@ -371,14 +443,8 @@ function bind() {
   $('#p-ovr-apply').onclick = () => hw('set_led_override', { power: $('#p-ovr').value }).then(refresh);
   $('#d-ovr-apply').onclick = () => hw('set_led_override', { sata: $('#d-ovr').value }).then(refresh);
 
-  $('#f-apply').onclick = () => hw('set_fan', {
-    mode: $('#f-mode').value, level: +$('#f-level').value, persist: true,
-    hdd: { off: $('#f-h0').value, low: $('#f-h1').value, mid: $('#f-h2').value, max: $('#f-h3').value },
-    cpu: { off: $('#f-c0').value, low: $('#f-c1').value, mid: $('#f-c2').value, crit: $('#f-c3').value },
-  });
-  $('#f-temp').onclick = () => hw('set_fan', {
-    mode: $('#f-mode').value, level: +$('#f-level').value, persist: false,
-  });
+  $('#f-apply').onclick = () => hw('set_fan', fanPayload(true));
+  $('#f-temp').onclick = () => hw('set_fan', fanPayload(false));
 
   $('#b-test').onclick = () => hw('beep_test', { ms: +$('#b-ms').value });
   $('#b-save').onclick = () => hw('set_beep', { ms: +$('#b-ms').value, boot_beep: true });
@@ -448,7 +514,7 @@ const DEMO_DATA = {
   net_link: { deployed: true, up: true, iface: 'eth0' },
   conf: {
     led_override: { power: 'auto', sata: 'auto' },
-    fan: { MODE: 'auto', MANUAL_LEVEL: 7, HDD_TEMP_OFF: 40, HDD_TEMP_LOW: 45, HDD_TEMP_MID: 55, HDD_TEMP_MAX: 60, TEMP_OFF: 60, TEMP_LOW: 65, TEMP_MID: 80, TEMP_CRITICAL: 100 },
+    fan: { MODE: 'auto', FAN_UI_MODE: 'auto', MANUAL_LEVEL: 7, HDD_TEMP_OFF: 40, HDD_TEMP_LOW: 45, HDD_TEMP_MID: 55, HDD_TEMP_MAX: 60, TEMP_OFF: 50, TEMP_LOW: 60, TEMP_MID: 70, TEMP_CRITICAL: 80 },
     beep: { beep_ms: 280 },
     power_schedule: { enabled: '0', shutdown_time: '', boot_time: '', rtc_wake: 1 },
   },

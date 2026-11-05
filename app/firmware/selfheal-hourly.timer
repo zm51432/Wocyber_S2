@@ -1,9 +1,9 @@
 [Unit]
-Description=Hourly self-heal check for customized fnOS features
+Description=Self-heal check every 5 minutes for customized fnOS features
 
 [Timer]
-OnBootSec=10min
-OnUnitActiveSec=1h
+OnBootSec=5min
+OnUnitActiveSec=5min
 Persistent=true
 Unit=selfheal-hourly.service
 

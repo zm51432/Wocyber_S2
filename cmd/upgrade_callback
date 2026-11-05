@@ -1,5 +1,10 @@
 #!/bin/bash
-# 升级后：恢复脚本、重装机服务
+# 升级后：恢复控制台脚本、把 fpk 内嵌的 install-1014 刷新为最新正版、并用正版
+#          install_all.sh 全量重新部署全部硬件定制（与原固件自愈同源）。
+#
+# 历史问题：早期 upgrade_callback 从不重新部署固件，导致升级后设备停在旧版 selfheal /
+# 参考文件，自检逻辑与当前固件错位，自愈反复修不好 -> GIVE UP -> systemd 标记 failed。
+# 现改为：升级时也走与 install_callback 完全一致的 install_all.sh 全量部署流程。
 set -u
 APP_NAME="${TRIM_APPNAME:-wocyber_S2}"
 VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
@@ -8,9 +13,52 @@ BK="$(cat "${VAR_DIR}/last_backup" 2>/dev/null || true)"
 if [ -n "$BK" ] && [ -d "$BK/scripts" ]; then
     cp -a "$BK/scripts/." "$VAR_DIR/scripts/" 2>/dev/null
 fi
+
+# 旧的 s2-power-led 兜底服务：若已存在则保留其单元（deploy/install_all 会按需处理）
 if systemctl list-unit-files 2>/dev/null | grep -q '^s2-power-led.service'; then
     install -m 755 "${DEST}/agent/s2-power-led-apply.sh" /usr/local/sbin/s2-power-led-apply.sh 2>/dev/null
     install -m 644 "${DEST}/agent/s2-power-led.service" /etc/systemd/system/s2-power-led.service 2>/dev/null
     systemctl daemon-reload >/dev/null 2>&1
 fi
+
+# ---- 升级时同样把 fpk 内嵌 install-1014 刷新为最新正版（自愈恢复源）----
+INSTALL1014_SRC=""
+if   [ -d "${DEST}/install-1014" ]; then                 INSTALL1014_SRC="${DEST}/install-1014"
+elif [ -d "${DEST}/target/install-1014" ]; then           INSTALL1014_SRC="${DEST}/target/install-1014"
+elif [ -d "/var/apps/${APP_NAME}/install-1014" ]; then    INSTALL1014_SRC="/var/apps/${APP_NAME}/install-1014"
+elif [ -d "/var/apps/${APP_NAME}/target/install-1014" ]; then INSTALL1014_SRC="/var/apps/${APP_NAME}/target/install-1014"
+elif [ -d /usr/local/share/install-1014 ]; then          INSTALL1014_SRC=/usr/local/share/install-1014
+fi
+if [ -n "$INSTALL1014_SRC" ]; then
+    mkdir -p /home/anna
+    rm -rf /home/anna/install-1014
+    cp -a "$INSTALL1014_SRC" /home/anna/install-1014
+    if id anna >/dev/null 2>&1; then
+        chown -R anna:anna /home/anna/install-1014 2>/dev/null
+    fi
+    echo "==> 升级时已刷新 /home/anna/install-1014（来源：$INSTALL1014_SRC）" >> "$VAR_DIR/server.log" 2>/dev/null
+fi
+
+# ---- 关键修复：升级时全量重新部署（与原固件自愈同源的 install_all.sh）----
+# 优先用刚刷新的 /home/anna/install-1014；找不到则回退 fpk 内嵌 / 已部署备份，仍可恢复全部功能。
+DEPLOY_SRC=""
+[ -f /home/anna/install-1014/install_all.sh ] && DEPLOY_SRC=/home/anna/install-1014
+[ -z "$DEPLOY_SRC" ] && [ -n "$INSTALL1014_SRC" ] && [ -f "$INSTALL1014_SRC/install_all.sh" ] && DEPLOY_SRC="$INSTALL1014_SRC"
+[ -z "$DEPLOY_SRC" ] && [ -f /usr/local/share/install-1014/install_all.sh ] && DEPLOY_SRC=/usr/local/share/install-1014
+[ -z "$DEPLOY_SRC" ] && [ -d "${DEST}/firmware" ] && [ -f "${DEST}/firmware/install_all.sh" ] && DEPLOY_SRC="${DEST}/firmware"
+
+if [ -n "$DEPLOY_SRC" ]; then
+    bash "$DEPLOY_SRC/install_all.sh" < /dev/null >> "$VAR_DIR/server.log" 2>&1 \
+        && echo "==> 升级部署成功（与原固件自愈同源，来源：$DEPLOY_SRC）" >> "$VAR_DIR/server.log" 2>/dev/null \
+        || echo "!! 升级部署 install_all.sh 返回非零（详见日志）" >> "$VAR_DIR/server.log" 2>/dev/null
+    # 部署后刷新备份目录，使其与本次部署一致且完整（含 install_all.sh / selfheal-check.sh / DTB）
+    for bk in /usr/local/share/install-1014 /home/anna/install-1014; do
+        [ "$DEPLOY_SRC" = "$bk" ] && continue
+        mkdir -p "$bk"
+        cp -a "$DEPLOY_SRC/." "$bk/" 2>/dev/null
+    done
+else
+    echo "!! 升级时未找到 install_all.sh，跳过自动部署（可手动在控制台『脚本修复』部署）" >> "$VAR_DIR/server.log" 2>/dev/null
+fi
+
 exit 0

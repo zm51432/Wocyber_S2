@@ -1,0 +1,87 @@
+#!/bin/bash
+# =============================================================
+# fanctl —— 风扇控制命令行（也是页面后端最省事的对接方式）
+#
+#   fanctl status              查看当前状态（模式/挡位/CPU/各盘温度）
+#   fanctl auto                切回自动温控
+#   fanctl manual [0-15]       切到手动并设挡位（省略挡位则用当前值）
+#   fanctl level <0-15>        只改手动挡位（等价于 manual <N>）
+#   fanctl temps               只看温度
+#
+# 手动/自动的切换【立即生效】，风扇守护进程 3 秒内响应。
+# 说明：这里写的是运行态文件 /var/lib/fan-control/{mode,level}，
+#       重启后会回落到 /etc/fan-control.conf 的默认值；
+#       若要永久生效，请同时修改 /etc/fan-control.conf。
+# =============================================================
+set -u
+
+RUN_DIR=/var/lib/fan-control
+MODE_FILE="$RUN_DIR/mode"
+LEVEL_FILE="$RUN_DIR/level"
+STATUS_FILE="$RUN_DIR/status"
+CONF_FILE=/etc/fan-control.conf
+
+mkdir -p "$RUN_DIR" 2>/dev/null
+
+cur_level() {
+    local lv=""
+    [ -r "$LEVEL_FILE" ] && lv=$(tr -d ' \t\r\n' < "$LEVEL_FILE" 2>/dev/null)
+    if [ -z "$lv" ]; then
+        lv=$(grep -E '^MANUAL_LEVEL=' "$CONF_FILE" 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' \t')
+    fi
+    echo "${lv:-6}"
+}
+
+usage() {
+    sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-status}" in
+    status)
+        if [ -r "$STATUS_FILE" ]; then
+            cat "$STATUS_FILE"
+            echo
+            echo "（数据源：风扇守护进程实时写入，3 秒刷新一次）"
+        else
+            echo "状态文件尚不存在：$STATUS_FILE"
+            echo "请确认 fan-control.service 是否已启动： systemctl status fan-control"
+            exit 1
+        fi
+        ;;
+    temps)
+        if [ -r "$STATUS_FILE" ]; then
+            grep -E '^(cpu_temp|hdd_max_temp|hdd_source|disks)=' "$STATUS_FILE"
+        else
+            echo "无状态文件，风扇服务可能未运行"
+            exit 1
+        fi
+        ;;
+    auto)
+        echo auto > "$MODE_FILE"
+        echo "✅ 已切换到【自动温控】模式（3 秒内生效）"
+        ;;
+    manual|level)
+        lv="${2:-}"
+        if [ -z "$lv" ] && [ "${1}" = "level" ]; then
+            echo "❌ level 需要给出挡位：fanctl level 8"
+            exit 1
+        fi
+        [ -z "$lv" ] && lv=$(cur_level)
+        case "$lv" in
+            ''|*[!0-9]*) echo "❌ 挡位必须是 0-15 的数字"; exit 1 ;;
+        esac
+        if [ "$lv" -gt 15 ]; then echo "❌ 挡位超出范围（0-15）"; exit 1; fi
+        echo manual > "$MODE_FILE"
+        echo "$lv" > "$LEVEL_FILE"
+        echo "✅ 已切换到【手动】模式，挡位 ${lv}/15（0=停转，15=全速，3 秒内生效）"
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        echo "❌ 未知命令: $1"
+        usage
+        exit 1
+        ;;
+esac
+exit 0

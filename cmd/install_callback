@@ -1,5 +1,13 @@
 #!/bin/bash
-# 安装后：写 settings.conf、生成预置修复脚本、部署全部硬件定制脚本、按需安装开机灯光服务
+# 安装后：写 settings.conf、生成预置修复脚本、用正版 install_all.sh 全量部署硬件定制、
+# 刷新 /home/anna/install-1014 自愈恢复源（持久化）。
+#
+# 设计原则（本次修复核心）：
+#   fpk 的安装/升级必须与"原固件自愈"用【同一个 install_all.sh】。
+#   该脚本会装 DTB、全部硬件服务、禁用冲突服务（pwm-fancontrol / HDled_monit_v0 /
+#   power-led-solid）、启用 selfheal + 每小时定时自检、并把源备份到
+#   /usr/local/share/install-1014 与 /home/anna/install-1014。
+#   这样飞牛 apt 升级覆盖 /boot 或改动服务后，selfheal 能原样重跑 install_all.sh 修复。
 set -u
 APP_NAME="${TRIM_APPNAME:-wocyber_S2}"
 ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
@@ -22,7 +30,14 @@ BOOT_SVC="${wizard_install_boot_service:-true}"
 } > "${ETC_DIR}/settings.conf"
 chmod 600 "${ETC_DIR}/settings.conf"
 
-# ---- 定位 fpk 内嵌的硬件脚本目录（兼容新旧 fnOS 的 APPDEST 布局）----
+# ---- 定位 fpk 内嵌的 install-1014（全量部署源的权威目录）----
+INSTALL1014_SRC=""
+if   [ -d "${DEST}/install-1014" ]; then                 INSTALL1014_SRC="${DEST}/install-1014"
+elif [ -d "${DEST}/target/install-1014" ]; then           INSTALL1014_SRC="${DEST}/target/install-1014"
+elif [ -d "/var/apps/${APP_NAME}/install-1014" ]; then    INSTALL1014_SRC="/var/apps/${APP_NAME}/install-1014"
+elif [ -d "/var/apps/${APP_NAME}/target/install-1014" ]; then INSTALL1014_SRC="/var/apps/${APP_NAME}/target/install-1014"
+elif [ -d /usr/local/share/install-1014 ]; then          INSTALL1014_SRC=/usr/local/share/install-1014
+fi
 FIRMWARE_DIR=""
 if   [ -d "${DEST}/firmware" ]; then        FIRMWARE_DIR="${DEST}/firmware"
 elif [ -d "${DEST}/target/firmware" ]; then FIRMWARE_DIR="${DEST}/target/firmware"
@@ -32,16 +47,13 @@ fi
 
 # ---- 预置修复脚本：页面「脚本修复」里一键执行 ----
 S="$VAR_DIR/scripts"
-
-# 统一的「寻找硬件脚本源」逻辑，供下面各脚本复用
-# 优先用 fpk 内嵌目录，其次 selfheal 备份目录，最后镜像出厂目录
 cat > "$S/_common.sh" <<'EOS'
 #!/bin/bash
 # 返回第一个存在的硬件脚本源目录（fpk 内嵌优先）
 _s2_firmware_dirs() {
   local FPK="${TRIM_APPDEST:-/var/apps/wocyber_S2}"
-  for d in "$FPK/firmware" "$FPK/target/firmware" \
-           /usr/local/share/install-1014 /home/anna/install-1014; do
+  for d in "$FPK/install-1014" "$FPK/firmware" "$FPK/target/install-1014" "$FPK/target/firmware" \
+           /home/anna/install-1014 /usr/local/share/install-1014; do
     [ -d "$d" ] && echo "$d"
   done
 }
@@ -55,7 +67,23 @@ _s2_find_file() {
 }
 EOS
 
-cat > "$S/00-部署全部硬件配置.sh" <<'EOS'
+cat > "$S/10-重装定制功能-install_all.sh" <<'EOS'
+#!/bin/bash
+# 完整重装（install_all.sh，与原固件自愈同一个文件；含 enable + start）
+set -u
+source "$(dirname "$0")/_common.sh"
+SRC="$(_s2_find_file install_all.sh)"
+if [ -n "$SRC" ]; then
+  echo "==> 使用安装源: $SRC"
+  bash "$SRC"
+  echo "==> 完成，退出码 $?"
+  exit 0
+fi
+echo "!! 未找到 install_all.sh"
+exit 1
+EOS
+
+cat > "$S/00-部署全部硬件配置-deploy.sh" <<'EOS'
 #!/bin/bash
 # 用 fpk 内嵌的 deploy.sh 重新部署全部硬件定制脚本（安全、不重启）
 set -u
@@ -69,23 +97,6 @@ for d in $(_s2_firmware_dirs); do
   fi
 done
 echo "!! 未找到 deploy.sh（fpk 内嵌目录或 /usr/local/share/install-1014）"
-exit 1
-EOS
-
-cat > "$S/10-重装定制功能.sh" <<'EOS'
-#!/bin/bash
-# 完整重装（install_all.sh，含 enable --now，部分项需重启生效）
-set -u
-source "$(dirname "$0")/_common.sh"
-SRC="$(_s2_find_file install_all.sh)"
-if [ -n "$SRC" ]; then
-  echo "==> 使用安装源: $SRC"
-  D="$(dirname "$SRC")"
-  bash "$SRC" --pre-reboot
-  echo "==> 完成，退出码 $?"
-  exit 0
-fi
-echo "!! 未找到 install_all.sh"
 exit 1
 EOS
 
@@ -150,13 +161,33 @@ EOS
 
 chmod +x "$S"/*.sh 2>/dev/null
 
-# ---- 安装即部署：把全部硬件定制脚本落到系统并启用服务 ----
-if [ -n "$FIRMWARE_DIR" ] && [ -f "$FIRMWARE_DIR/deploy.sh" ]; then
-    echo "==> 部署硬件定制脚本: $FIRMWARE_DIR" >> "$VAR_DIR/server.log" 2>/dev/null
-    bash "$FIRMWARE_DIR/deploy.sh" "$FIRMWARE_DIR" >> "$VAR_DIR/server.log" 2>&1 || \
-        echo "!! deploy.sh 返回非零（已忽略，详见 /var/log/s2hwctl-deploy.log）" >> "$VAR_DIR/server.log" 2>/dev/null
+# ---- 安装即全量部署：先把正版 install-1014 刷新到自愈恢复源，再跑 install_all.sh ----
+if [ -n "$INSTALL1014_SRC" ]; then
+    mkdir -p /home/anna
+    rm -rf /home/anna/install-1014
+    cp -a "$INSTALL1014_SRC" /home/anna/install-1014
+    # 若本机存在 anna 用户，把归属改成 anna，避免权限问题
+    if id anna >/dev/null 2>&1; then
+        chown -R anna:anna /home/anna/install-1014 2>/dev/null
+    fi
+    echo "==> 已刷新 /home/anna/install-1014（来源：$INSTALL1014_SRC）" >> "$VAR_DIR/server.log" 2>/dev/null
 else
-    echo "!! 未找到 fpk 内嵌硬件脚本目录，跳过自动部署（可手动在「脚本修复」部署）" >> "$VAR_DIR/server.log" 2>/dev/null
+    echo "!! 未找到 fpk 内嵌 install-1014（DEST=$DEST），将尝试用 /usr/local/share 备份" >> "$VAR_DIR/server.log" 2>/dev/null
+fi
+
+# 运行正版 install_all.sh（与原固件自愈同源）：
+#   装 DTB / 全部硬件服务、禁用冲突服务、启用 selfheal + 每小时定时自检、备份到双路径。
+# 非交互（stdin 非 tty）下不会卡在读入、也不会自触发重启，脚本以 exit 0 结束。
+DEPLOY_SRC=""
+[ -f /home/anna/install-1014/install_all.sh ] && DEPLOY_SRC=/home/anna/install-1014
+[ -z "$DEPLOY_SRC" ] && [ -n "$INSTALL1014_SRC" ] && [ -f "$INSTALL1014_SRC/install_all.sh" ] && DEPLOY_SRC="$INSTALL1014_SRC"
+[ -z "$DEPLOY_SRC" ] && [ -f /usr/local/share/install-1014/install_all.sh ] && DEPLOY_SRC=/usr/local/share/install-1014
+if [ -n "$DEPLOY_SRC" ]; then
+    bash "$DEPLOY_SRC/install_all.sh" < /dev/null >> "$VAR_DIR/server.log" 2>&1 \
+        && echo "==> 已用 install_all.sh 全量部署（与原固件自愈同源，来源：$DEPLOY_SRC）" >> "$VAR_DIR/server.log" 2>/dev/null \
+        || echo "!! install_all.sh 返回非零（详见 /var/log 与 server.log）" >> "$VAR_DIR/server.log" 2>/dev/null
+else
+    echo "!! 未找到 install_all.sh，跳过自动部署（可手动在『脚本修复』部署）" >> "$VAR_DIR/server.log" 2>/dev/null
 fi
 
 # ---- 共享目录里放一份 README，方便用户从「文件管理 → 应用文件」丢脚本进来 ----
@@ -168,8 +199,7 @@ EOT
 fi
 
 # ---- 开机自动套用电源灯配置 ----
-# v1.1.4 起电源灯由 power-led-net（网络状态灯：有链路绿灯常亮、无链路红灯闪烁）常驻接管；
-# 仅当部署失败（power-led-net 未落盘）时，才安装旧的 s2-power-led 开机套用服务作兜底。
+# 电源灯由 power-led-net 常驻接管；仅当部署失败（power-led-net 未落盘）时回退安装旧的 s2-power-led 兜底。
 if [ "$BOOT_SVC" = "true" ] && [ ! -f /etc/systemd/system/power-led-net.service ]; then
     if [ -d /run/systemd/system ] || [ -d /lib/systemd/system ]; then
         echo "==> power-led-net 未部署，回退安装 s2-power-led 兜底" >> "$VAR_DIR/server.log" 2>/dev/null
@@ -181,7 +211,7 @@ if [ "$BOOT_SVC" = "true" ] && [ ! -f /etc/systemd/system/power-led-net.service 
     fi
 fi
 
-# ---- CLI 软链由 resource/usr-local-linker 处理，这里兜底一次 ----
+# ---- CLI 软链兜底 ----
 [ -f "${DEST}/bin/s2hwctl-cli" ] && install -m 755 "${DEST}/bin/s2hwctl-cli" /usr/local/bin/s2hwctl-cli 2>/dev/null
 
 exit 0

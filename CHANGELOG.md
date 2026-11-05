@@ -1,10 +1,24 @@
 # wocyber_S2 改动记录
 
-- **当前版本**：`wocyber_S2.fpk` v1.3.5
-- **相对版本**：上一版 v1.3.4
-- **改动文件**：`manifest`（`version`、`changelog`）、`server/public/index.html`、`server/public/app.js`、`server/public/style.css`
+- **当前版本**：`wocyber_S2.fpk` v1.3.12
+- **相对版本**：上一版 v1.3.5
+- **改动文件**：`manifest`（`version`、`changelog`）、`firmware/selfheal-hourly.timer`、`install-1014/selfheal-check.sh`、`cmd/install_callback`、`cmd/upgrade_callback`、`server/public/index.html`、`server/public/app.js`、`firmware/fan-control.sh`、`install-1014/power-led-net.sh`、`install-1014/sata-led-manager.sh` 等
 
-## v1.3.5 改动明细（本次）
+## v1.3.12 累计改动（v1.3.6 – v1.3.12）
+
+### ① 自愈（selfheal）全量修复 + 5 分钟自检
+- 采用设备正版 `install_all.sh` 全量修复版 `selfheal-check.sh`：检测运行中 DTB 与定制版 DTB 的 MD5 不一致，或关键脚本/服务缺失时，自动重跑 `install_all.sh` 并重启生效。
+- `selfheal-hourly.timer` 自检间隔由 1 小时改为 **开机 5 分钟后首跑、之后每 5 分钟一次**（`OnBootSec=5min` / `OnUnitActiveSec=5min`），飞牛 apt 升级覆盖官方 DTB 后能快速自愈。
+- 安装/升级回调（`install_callback` / `upgrade_callback`）先刷新 `/home/anna/install-1014`（正版源），再以非交互方式 `bash install_all.sh` 全量部署，确保装 fpk / 飞牛升级后所有现有功能自动恢复，并内置禁用与现用固件冲突的自动化服务（`pwm-fancontrol`、`HDled_monit_v0`、`power-led-solid` 等）。
+
+### ② 风扇新增「手动控温」模式（UI 三模式）
+- 模式下拉新增 `auto` / `manual_temp` / `manual` 三选项：仅「手动挡位（manual）」模式下挡位滑块可拖，其余两种模式滑块锁定。
+- 自动温控固定阈值：CPU `50/60/70/80℃` 对应 `0/5/10/15` 档（4 段线性），硬盘 `40/50/55/60℃`；手动可调模式放开曲线参数。
+
+### ③ 电源灯 / 硬盘灯手动覆盖（LED override）
+- `power-led-net.sh`、`sata-led-manager.sh` 新增 `/etc/s2hwctl/led-override.conf` 读取：`POWER_LED=off` / `SATA_LED=off` 时对应 LED 红绿全灭，且每检测节拍重读，固件升级 / selfheal 重装 / 服务重启均无法改变用户选择；默认 `auto` 完全走原自动逻辑，向后兼容。
+
+## v1.3.5 改动明细（上版）
 
 ### 7. 风扇温控逻辑反转 + 固定阈值（`index.html` / `app.js` / `style.css`）
 - **自动温控模式（锁定）**：采用固定阈值，**不再显示调节窗口**。阈值固定为 CPU `50 / 60 / 70 / 80 ℃`、硬盘 `40 / 50 / 55 / 60 ℃`。

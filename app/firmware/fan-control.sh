@@ -44,11 +44,11 @@ HDD_TEMP_LOW=45      # 40-45  低速
 HDD_TEMP_MID=55      # 45-55  线性 1→8
 HDD_TEMP_MAX=60      # >= 60  全速
 
-# CPU 温控曲线（沿用原版，作为兜底）
-TEMP_OFF=60
-TEMP_LOW=65
-TEMP_MID=80
-TEMP_CRITICAL=100
+# CPU 温控曲线（自动温控固定曲线，与页面一致：50~60→最高5档，60~70→最高10档，70~80→10~15档）
+TEMP_OFF=50
+TEMP_LOW=60
+TEMP_MID=70
+TEMP_CRITICAL=80
 
 # 硬盘取温：hwmon 可用时不轮询 smartctl；不可用时每 N 个周期问一次
 HDD_SMART_CYCLES=10  # 10 × 3s = 30s
@@ -236,18 +236,27 @@ read_disk_temp_smart() {
 }
 
 # ---------- 挡位计算 ----------
-# 通用曲线：off/low/mid 三段，返回 0-15
+# CPU 温控曲线（4 段线性，与页面「自动温控」固定曲线一致）：
+#   <= OFF(50)          0
+#   OFF(50)~LOW(60)     0 → 5
+#   LOW(60)~MID(70)     5 → 10
+#   MID(70)~CRIT(80)    10 → 15
+#   >= CRIT(80)         15
+# 即每 10℃ 升温对应 5 个挡位，最终与硬盘曲线取较高挡位。
 level_from_curve() {
-    local temp=$1 off=$2 low=$3 mid=$4
-    if [ "$temp" -lt "$off" ]; then
+    local temp=$1 off=$2 low=$3 mid=$4 crit=$5
+    local r d
+    if [ "$temp" -le "$off" ]; then
         echo 0
     elif [ "$temp" -lt "$low" ]; then
-        echo 1
+        r=$(( low - off )); [ "$r" -le 0 ] && { echo 5; return; }
+        d=$(( temp - off )); echo $(( d * 5 / r ))
     elif [ "$temp" -lt "$mid" ]; then
-        local range=$(( mid - low ))
-        local delta=$(( temp - low ))
-        [ "$range" -le 0 ] && { echo 15; return; }
-        echo $(( 1 + delta * 7 / range ))
+        r=$(( mid - low )); [ "$r" -le 0 ] && { echo 10; return; }
+        d=$(( temp - low )); echo $(( 5 + d * 5 / r ))
+    elif [ "$temp" -lt "$crit" ]; then
+        r=$(( crit - mid )); [ "$r" -le 0 ] && { echo 15; return; }
+        d=$(( temp - mid )); echo $(( 10 + d * 5 / r ))
     else
         echo 15
     fi
@@ -320,7 +329,7 @@ main() {
     trim_log
     log "=== 风扇控制服务启动（v4：硬盘温度 + 手动挡位接口） ==="
     log "曲线 硬盘: <${HDD_TEMP_OFF}停 ${HDD_TEMP_OFF}-${HDD_TEMP_LOW}1挡 ${HDD_TEMP_LOW}-${HDD_TEMP_MID}1→10挡 ${HDD_TEMP_MID}-${HDD_TEMP_MAX}10→15挡 >=${HDD_TEMP_MAX}全速"
-    log "曲线 CPU : <${TEMP_OFF}停 ${TEMP_OFF}-${TEMP_LOW}1挡 ${TEMP_LOW}-${TEMP_MID}1→8挡 >=${TEMP_MID}全速"
+    log "曲线 CPU : <=${TEMP_OFF}停 ${TEMP_OFF}-${TEMP_LOW}0→5挡 ${TEMP_LOW}-${TEMP_MID}5→10挡 ${TEMP_MID}-${TEMP_CRITICAL}10→15挡 >=${TEMP_CRITICAL}全速"
 
     # 尝试加载 drivetemp（失败不影响，走 smartctl 兜底）
     modprobe drivetemp 2>/dev/null && log "drivetemp 模块已加载（硬盘温度走内核 hwmon，不唤醒硬盘）"
@@ -386,7 +395,7 @@ main() {
                 hdd_level=$(level_from_hdd "$hdd_max")
                 [ "$hdd_max" -ge "$HDD_TEMP_MAX" ] && log "⚠️  硬盘温度 ${hdd_max}℃ 已达上限阈值 ${HDD_TEMP_MAX}℃，风扇全速"
             fi
-            cpu_level=$(level_from_curve "$cpu" "$TEMP_OFF" "$TEMP_LOW" "$TEMP_MID")
+            cpu_level=$(level_from_curve "$cpu" "$TEMP_OFF" "$TEMP_LOW" "$TEMP_MID" "$TEMP_CRITICAL")
             # 两条曲线取较高者：硬盘 45℃ 就该转，CPU 65℃ 也该转，谁更热听谁的
             target_speed=$(( hdd_level > cpu_level ? hdd_level : cpu_level ))
         fi

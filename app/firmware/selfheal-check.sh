@@ -16,7 +16,7 @@
 # 所以本脚本【不猜版本号】，直接看东西在不在、对不对：
 #   1) /boot/dtb/rockchip/rk3568-nanopi-r5s.dtb 的 MD5 是否等于定制版
 #   2) 关键脚本 / service / logind 配置是否缺失
-#   3) /usr/local/share/install-1014 安装源是否还在（不在就从 /usr/local/share 备份恢复）
+#   3) /home/anna/install-1014 安装源是否还在（不在就从 /usr/local/share 备份恢复）
 # 有问题 → 重装 → 重启生效。带连续重试上限，绝不会无限重启。
 #
 # 用法
@@ -28,7 +28,7 @@ set -uo pipefail
 
 LOG_TAG=selfheal
 BACKUP_DIR=/usr/local/share/install-1014      # apt 升级不会碰这里
-INSTALL_DIR=/usr/local/share/install-1014           # guard 硬编码找这里
+INSTALL_DIR=/home/anna/install-1014           # guard 硬编码找这里
 INSTALL_SCRIPT="$INSTALL_DIR/install_all.sh"
 GUARD_BIN=/usr/local/bin/boot-version-guard.sh
 DTB_DST=/boot/dtb/rockchip/rk3568-nanopi-r5s.dtb

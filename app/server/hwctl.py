@@ -387,6 +387,7 @@ def op_set_led_override(params):
 
 def op_set_fan(params):
     mode = params.get("mode", "auto")
+    ui_mode = params.get("ui_mode", mode)        # 前端标签页：auto / manual_temp / manual
     level = int(params.get("level", 6))
     level = max(0, min(15, level))
     persist = bool(params.get("persist", True))
@@ -397,6 +398,7 @@ def op_set_fan(params):
         if not os.path.exists(ETC_FAN):
             return False, "未找到 %s，风扇服务可能未安装" % ETC_FAN
         updates["MODE"] = mode
+        updates["FAN_UI_MODE"] = ui_mode          # 仅前端用，守护进程会忽略未知键
         updates["MANUAL_LEVEL"] = level
         for k, v in (("HDD_TEMP_OFF", hdd.get("off")), ("HDD_TEMP_LOW", hdd.get("low")),
                      ("HDD_TEMP_MID", hdd.get("mid")), ("HDD_TEMP_MAX", hdd.get("max")),
