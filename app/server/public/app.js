@@ -384,6 +384,12 @@ function applyFanMode() {
   if (box) box.classList.toggle('hidden', !curveOn);        // 手动控温：显示可编辑曲线
   if (mnote) mnote.classList.toggle('hidden', !manualOn);   // 手动挡位：显示说明
   if (lvl) lvl.disabled = !manualOn;                       // 仅手动挡位可拖动滑块
+  // 自动模式：隐藏右侧数值 "X/15"，改用"自动"提示，避免显示数字
+  const showNum = !lockOn;
+  const fv = $('#f-level-v'), fmax = $('#f-level-max'), fauto = $('#f-level-auto');
+  if (fv) fv.classList.toggle('hidden', !showNum);
+  if (fmax) fmax.classList.toggle('hidden', !showNum);
+  if (fauto) fauto.classList.toggle('hidden', showNum);
   if (lockOn) {                                            // 自动：固定参数落进隐藏输入框
     $('#f-h0').value = AUTO_HDD.off; $('#f-h1').value = AUTO_HDD.low;
     $('#f-h2').value = AUTO_HDD.mid; $('#f-h3').value = AUTO_HDD.max;

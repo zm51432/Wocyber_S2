@@ -150,18 +150,12 @@
           <option value="manual">手动挡位</option>
         </select>
       </label>
-      <label class="row">挡位 <input type="range" id="f-level" min="0" max="15" value="6" disabled><b id="f-level-v">6</b><em>/15</em></label>
+      <label class="row">挡位 <input type="range" id="f-level" min="0" max="15" value="6" disabled><b id="f-level-v">6</b><em id="f-level-max">/15</em><span id="f-level-auto" class="hidden">自动</span></label>
     </div>
     <p class="hint" id="f-level-hint">右侧「挡位」滑块仅在 <b>手动挡位</b> 模式下可拖动；其余模式由温控自动决定挡位。</p>
     <div id="f-lock" class="curve-box lock hidden">
-      <div class="curve-hd">THERMAL CURVE · 自动温控（固定曲线，不可调）</div>
-      <div class="lock-row">
-        <span class="lk">CPU <b>50~60</b>℃ → 最高 <b>5</b> 档</span>
-        <span class="lk">CPU <b>60~70</b>℃ → 最高 <b>10</b> 档</span>
-        <span class="lk">CPU <b>70~80</b>℃ → <b>10~15</b> 档</span>
-        <span class="lk">硬盘 <b>40/50/55/60</b>℃</span>
-      </div>
-      <p class="hint">自动温控采用固定阈值，不可调节。需自定义请切到「手动控温」。</p>
+      <div class="curve-hd">THERMAL CURVE · 自动温控</div>
+      <p class="hint">自动温控：系统依据 CPU 与硬盘温度自动调速，采用固定曲线，无需手动设置。需要自定义阈值请切换到「手动控温」。</p>
     </div>
     <div id="f-curve" class="curve-box hidden">
       <div class="curve-hd">THERMAL CURVE · 手动控温（自定义曲线，仍自动调速）</div>
