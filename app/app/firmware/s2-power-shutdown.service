@@ -1,0 +1,7 @@
+[Unit]
+Description=S2 定时关机执行
+Documentation=man:poweroff(8)
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/poweroff

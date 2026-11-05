@@ -1,0 +1,17 @@
+[Unit]
+Description=Power key: long press 3s -> beep + poweroff
+Documentation=file:/usr/local/sbin/power-key-daemon.py
+After=systemd-udevd.service systemd-logind.service local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/power-key-daemon.py
+Restart=always
+RestartSec=3
+KillMode=process
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
