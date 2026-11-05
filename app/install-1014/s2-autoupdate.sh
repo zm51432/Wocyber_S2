@@ -32,6 +32,11 @@ ETC_DIR="${TRIM_PKGETC:-/var/apps/${APP_NAME}/etc}"
 VAR_DIR="${TRIM_PKGVAR:-/var/apps/${APP_NAME}/var}"
 LOG="$VAR_DIR/autoupdate.log"
 mkdir -p "$VAR_DIR" 2>/dev/null || true
+# 包根（manifest / cmd / config 通常所在的父目录）；当 APP_ROOT 落在 target/ 子目录时其上溯一层
+PKG_ROOT="/var/apps/${APP_NAME}"
+if [ "${APP_ROOT}" != "${APP_ROOT%/target}" ]; then
+  PKG_ROOT="$(dirname "$APP_ROOT")"
+fi
 REPO="zm51432/Wocyber_S2"
 ASSET="wocyber_S2.fpk"
 
@@ -127,13 +132,17 @@ backup_current(){
   ls -1t "$VAR_DIR"/backup_${root_base}_*.tar.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
 }
 restart_console(){
-  if [ -x "$APP_ROOT/cmd/main" ]; then
-    bash "$APP_ROOT/cmd/main" stop  >> "$LOG" 2>&1
+  local main=""
+  for c in "$PKG_ROOT/cmd/main" "$APP_ROOT/cmd/main"; do
+    [ -x "$c" ] && { main="$c"; break; }
+  done
+  if [ -n "$main" ]; then
+    bash "$main" stop  >> "$LOG" 2>&1
     sleep 1
-    bash "$APP_ROOT/cmd/main" start >> "$LOG" 2>&1
-    log INFO "控制台已重启"
+    bash "$main" start >> "$LOG" 2>&1
+    log INFO "控制台已重启（via $main）"
   else
-    log WARN "未找到 cmd/main，跳过控制台重启（请手动重启应用）"
+    log WARN "未找到 cmd/main（试过 $PKG_ROOT/cmd/main 与 $APP_ROOT/cmd/main），跳过控制台重启（请手动重启应用）"
   fi
 }
 
@@ -208,6 +217,7 @@ do_upgrade(){
   cp -a "$appex/." "$APP_ROOT/" 2>/dev/null
   cp -a "$ex/cmd/."     "$APP_ROOT/cmd/"     2>/dev/null
   cp -f "$ex/manifest"  "$APP_ROOT/manifest"  2>/dev/null
+  cp -f "$ex/manifest"  "$PKG_ROOT/manifest"  2>/dev/null
   cp -a "$ex/config/."  "$APP_ROOT/config/"  2>/dev/null
   cp -a "$ex/wizard/."  "$APP_ROOT/wizard/"  2>/dev/null
   log INFO "文件覆盖完成，开始重新部署硬件固件"
